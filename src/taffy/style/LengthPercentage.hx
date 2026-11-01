@@ -4,6 +4,8 @@
 
 package taffy.style;
 
+import taffy.util.OptionalFloat;
+
 /**
  * A unit of linear measurement: a length or a percentage.
  */
@@ -45,14 +47,14 @@ abstract LengthPercentage(CompactLength) {
     }
 
     /** Resolve against an optional context (Rust `MaybeResolve<Option<f32>, Option<f32>>`) */
-    public inline function maybeResolve(context:Null<Float>):Null<Float> {
-        return this.tag == CompactLength.LENGTH_TAG ? this.value : (context != null ? (context : Float) * this.value : null);
+    public inline function maybeResolve(context:OptionalFloat):OptionalFloat {
+        return this.tag == CompactLength.LENGTH_TAG ? OptionalFloat.some(this.value) : (context.isSome() ? OptionalFloat.some(context.unwrap() * this.value) : OptionalFloat.NONE);
     }
 
     /** Resolve against an optional context, defaulting to zero */
-    public inline function resolveOrZero(context:Null<Float>):Float {
+    public inline function resolveOrZero(context:OptionalFloat):Float {
         final r = maybeResolve(context);
-        return r != null ? (r : Float) : 0.0;
+        return r.isSome() ? r.unwrap() : 0.0;
     }
 
     public inline function equals(other:LengthPercentage):Bool {

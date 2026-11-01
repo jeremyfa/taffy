@@ -35,6 +35,10 @@ import taffy.tree.OofCandidate;
 import taffy.tree.OofCandidates;
 import taffy.tree.OofPositioningArea;
 import taffy.util.Sys;
+import taffy.geometry.RectOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.tree.LayoutPartialTree;
@@ -95,13 +99,13 @@ class OofAxis {
     /** The size of the containing block in this axis */
     public final cbSize:Float;
     /** The box's resolved inset start (null = auto) */
-    public final insetStart:Null<Float>;
+    public final insetStart:OptionalFloat;
     /** The box's resolved inset end (null = auto) */
-    public final insetEnd:Null<Float>;
+    public final insetEnd:OptionalFloat;
     /** The box's resolved margin start (null = auto) */
-    public final marginStart:Null<Float>;
+    public final marginStart:OptionalFloat;
     /** The box's resolved margin end (null = auto) */
-    public final marginEnd:Null<Float>;
+    public final marginEnd:OptionalFloat;
     /** The box's static position (relative to the containing block's inset-resolution area) */
     public final staticPosition:AxisStaticPosition;
     /** The box's self-alignment in this axis */
@@ -115,7 +119,7 @@ class OofAxis {
     /** Whether the containing block is a scroll container which scrolls in this axis */
     public final isScrollAxis:Bool;
 
-    public function new(cbSize:Float, insetStart:Null<Float>, insetEnd:Null<Float>, marginStart:Null<Float>, marginEnd:Null<Float>, staticPosition:AxisStaticPosition, alignment:OofAlignment, safety:AlignmentSafety, isInline:Bool, reversed:Bool, isScrollAxis:Bool) {
+    public function new(cbSize:Float, insetStart:OptionalFloat, insetEnd:OptionalFloat, marginStart:OptionalFloat, marginEnd:OptionalFloat, staticPosition:AxisStaticPosition, alignment:OofAlignment, safety:AlignmentSafety, isInline:Bool, reversed:Bool, isScrollAxis:Bool) {
         this.cbSize = cbSize;
         this.insetStart = insetStart;
         this.insetEnd = insetEnd;
@@ -144,20 +148,20 @@ class OofAxis {
         var imcbStart:Float;
         var imcbEnd:Float;
         var weakerEdge:AxisStaticEdge;
-        if (insetStart != null && insetEnd != null) {
-            imcbStart = insetStart;
-            imcbEnd = cbSize - insetEnd;
+        if (insetStart.isSome() && insetEnd.isSome()) {
+            imcbStart = insetStart.unwrap();
+            imcbEnd = cbSize - insetEnd.unwrap();
             weakerEdge = endEdge();
         }
-        else if (insetStart != null) {
+        else if (insetStart.isSome()) {
             // A lone auto inset resolves to zero, and is the weaker inset
-            imcbStart = insetStart;
+            imcbStart = insetStart.unwrap();
             imcbEnd = cbSize;
             weakerEdge = AxisStaticEdge.End;
         }
-        else if (insetEnd != null) {
+        else if (insetEnd.isSome()) {
             imcbStart = 0.0;
-            imcbEnd = cbSize - insetEnd;
+            imcbEnd = cbSize - insetEnd.unwrap();
             weakerEdge = AxisStaticEdge.Start;
         }
         else {
@@ -211,7 +215,7 @@ class OofAxis {
 
     /** Whether an `auto` size in this axis is the stretch-fit size (rather than fit-content) */
     public function isStretchSized(isReplaced:Bool, isTable:Bool):Bool {
-        final noAutoInset = insetStart != null && insetEnd != null;
+        final noAutoInset = insetStart.isSome() && insetEnd.isSome();
         return noAutoInset && switch alignment {
             case Stretch: true;
             case Normal: !isReplaced && !isTable;
@@ -221,18 +225,18 @@ class OofAxis {
 
     /** Resolve the box's auto margins given its final size */
     public function resolveMargins(size:Float):Line {
-        final bothInsets = insetStart != null && insetEnd != null;
+        final bothInsets = insetStart.isSome() && insetEnd.isSome();
         final imcb = insetModifiedContainingBlock();
         final freeSpace = imcb.end - imcb.start - size;
-        if (marginStart != null && marginEnd != null)
-            return new Line(marginStart, marginEnd);
+        if (marginStart.isSome() && marginEnd.isSome())
+            return new Line(marginStart.unwrap(), marginEnd.unwrap());
         // If either inset is auto then auto margins resolve to zero
         if (!bothInsets)
             return new Line(marginStart.unwrapOr(0.0), marginEnd.unwrapOr(0.0));
-        if (marginStart != null)
-            return new Line(marginStart, freeSpace - (marginStart : Float));
-        if (marginEnd != null)
-            return new Line(freeSpace - (marginEnd : Float), marginEnd);
+        if (marginStart.isSome())
+            return new Line(marginStart.unwrap(), freeSpace - marginStart.unwrap());
+        if (marginEnd.isSome())
+            return new Line(freeSpace - marginEnd.unwrap(), marginEnd.unwrap());
         // In the inline axis, negative free space is absorbed entirely by the end margin
         if (freeSpace < 0.0 && isInline) {
             return reversed ? new Line(freeSpace, 0.0) : new Line(0.0, freeSpace);
@@ -243,7 +247,7 @@ class OofAxis {
     /** Compute the physical start of the box's border box given its final size and margins */
     public function position(size:Float, margin:Line):Float {
         final imcb = insetModifiedContainingBlock();
-        if (insetStart == null && insetEnd == null) {
+        if (insetStart.isNone() && insetEnd.isNone()) {
             // Both insets are auto: static alignment, with safe overflow relative to the IMCB
             final sp = staticPosition;
             final marginBoxSize = size + margin.start + margin.end;
@@ -253,13 +257,13 @@ class OofAxis {
             return offset + margin.start;
         }
         // One auto inset: the margin box is aligned to the edge of the stronger inset
-        if (insetEnd == null)
+        if (insetEnd.isNone())
             return imcb.start + margin.start;
-        if (insetStart == null)
+        if (insetStart.isNone())
             return imcb.end - size - margin.end;
 
         // Auto margins have already absorbed all of the free space
-        if (marginStart == null || marginEnd == null)
+        if (marginStart.isNone() || marginEnd.isNone())
             return imcb.start + margin.start;
         final marginBoxSize = size + margin.start + margin.end;
         final imcbSize = imcb.end - imcb.start;
@@ -469,23 +473,23 @@ class Oof {
 
         final aspectRatio = childStyle.aspectRatio;
         final marginStyle = childStyle.margin;
-        final margin = new RectOf<Null<Float>>(
+        final margin = new RectOpt(
             marginStyle.left.resolveToOption(areaWidth),
             marginStyle.right.resolveToOption(areaWidth),
             marginStyle.top.resolveToOption(areaWidth),
             marginStyle.bottom.resolveToOption(areaWidth)
         );
-        final padding = childStyle.padding.resolveOrZero(areaWidth);
-        final border = childStyle.border.resolveOrZero(areaWidth);
+        final padding = childStyle.padding.resolveOrZero(OptionalFloat.some(areaWidth));
+        final border = childStyle.border.resolveOrZero(OptionalFloat.some(areaWidth));
         final paddingBorderSum = padding.add(border).sumAxes();
         final boxSizingAdjustment = childStyle.boxSizing == ContentBox ? paddingBorderSum : Size.ZERO;
 
         // Resolve inset
         final inset = childStyle.inset;
-        final left = inset.left.maybeResolve(areaWidth);
-        final right = inset.right.maybeResolve(areaWidth);
-        final top = inset.top.maybeResolve(areaHeight);
-        final bottom = inset.bottom.maybeResolve(areaHeight);
+        final left = inset.left.maybeResolve(OptionalFloat.some(areaWidth));
+        final right = inset.right.maybeResolve(OptionalFloat.some(areaWidth));
+        final top = inset.top.maybeResolve(OptionalFloat.some(areaHeight));
+        final bottom = inset.bottom.maybeResolve(OptionalFloat.some(areaHeight));
 
         // Compute known dimensions from min/max/inherent size styles
         final sizeStyle = childStyle.size;
@@ -538,7 +542,7 @@ class Oof {
             ));
         }
         final clampedAvailable = availableSpaceSize.maybeClamp(minSize, maxSize);
-        final availableSpace = new SizeOf<AvailableSpace>(Definite(clampedAvailable.width), Definite(clampedAvailable.height));
+        final availableSpace = new SizeAvail(Definite(clampedAvailable.width), Definite(clampedAvailable.height));
 
         // Resolve any sizing keywords in the size styles. An explicitly sized axis takes precedence over the automatic size below.
         if (sizeStyle.width.isSizingKeyword() || sizeStyle.height.isSizingKeyword()) {
@@ -548,7 +552,7 @@ class Oof {
                 knownDimensions,
                 sizeStyle,
                 areaSize,
-                new RectOf<Null<Float>>(left, right, top, bottom),
+                new RectOpt(left, right, top, bottom),
                 margin,
                 ContentSize
             );
@@ -557,33 +561,33 @@ class Oof {
 
         // Resolve automatic sizes: stretch-fit sizes first so that a size in the other axis can be
         // transferred through the aspect ratio.
-        final stretchWidth = knownDimensions.width == null && horizontal.isStretchSized(isReplaced, isTable);
-        final stretchHeight = knownDimensions.height == null && vertical.isStretchSized(isReplaced, isTable);
+        final stretchWidth = knownDimensions.width.isNone() && horizontal.isStretchSized(isReplaced, isTable);
+        final stretchHeight = knownDimensions.height.isNone() && vertical.isStretchSized(isReplaced, isTable);
         final bothExplicitStretch = horizontal.alignment == Stretch && vertical.alignment == Stretch;
         final stretchAspectRatio = (stretchWidth && stretchHeight && bothExplicitStretch) ? null : aspectRatio;
         if (stretchWidth) {
             if (isTable) {
                 // A table cannot be stretched smaller than its content: stretch-fit is a minimum
-                minSize = minSize.withWidth(Sys.f32Max(minSize.width.unwrapOr(0.0), stretchFitSize.width));
+                minSize = minSize.withWidth(OptionalFloat.some(Sys.f32Max(minSize.width.unwrapOr(0.0), stretchFitSize.width)));
             }
             else {
-                knownDimensions = knownDimensions.withWidth(stretchFitSize.width);
+                knownDimensions = knownDimensions.withWidth(OptionalFloat.some(stretchFitSize.width));
                 knownDimensions = knownDimensions.maybeApplyAspectRatio(stretchAspectRatio).maybeClamp(minSize, maxSize);
             }
         }
-        if (knownDimensions.height == null && stretchHeight) {
+        if (knownDimensions.height.isNone() && stretchHeight) {
             if (isTable) {
-                minSize = minSize.withHeight(Sys.f32Max(minSize.height.unwrapOr(0.0), stretchFitSize.height));
+                minSize = minSize.withHeight(OptionalFloat.some(Sys.f32Max(minSize.height.unwrapOr(0.0), stretchFitSize.height)));
             }
             else {
-                knownDimensions = knownDimensions.withHeight(stretchFitSize.height);
+                knownDimensions = knownDimensions.withHeight(OptionalFloat.some(stretchFitSize.height));
                 knownDimensions = knownDimensions.maybeApplyAspectRatio(stretchAspectRatio).maybeClamp(minSize, maxSize);
             }
         }
 
         var finalSize:Size;
-        if (knownDimensions.width != null && knownDimensions.height != null) {
-            finalSize = new Size(knownDimensions.width, knownDimensions.height);
+        if (knownDimensions.width.isSome() && knownDimensions.height.isSome()) {
+            finalSize = new Size(knownDimensions.width.unwrap(), knownDimensions.height.unwrap());
         }
         else {
             final measuredSize = tree.measureChildSizeBoth(

@@ -12,6 +12,7 @@ import taffy.style.AlignContent;
 import taffy.style.AlignItems;
 import taffy.style.Direction;
 import taffy.style.FlexDirection;
+import taffy.geometry.SizeOpt;
 
 /**
  * Values that can be cached during the flexbox algorithm
@@ -46,10 +47,10 @@ class AlgoConstants {
     public var lineCount:Null<Int>;
 
     /** The item's min_size style */
-    public var minSize:SizeOf<Null<Float>>;
+    public var minSize:SizeOpt;
 
     /** The item's max_size style */
-    public var maxSize:SizeOf<Null<Float>>;
+    public var maxSize:SizeOpt;
 
     /** The border of this section */
     public var border:Rect;
@@ -79,10 +80,10 @@ class AlgoConstants {
     public var justifyContent:AlignContent;
 
     /** The border-box size of the node being laid out (if known) */
-    public var nodeOuterSize:SizeOf<Null<Float>>;
+    public var nodeOuterSize:SizeOpt;
 
     /** The content-box size of the node being laid out (if known) */
-    public var nodeInnerSize:SizeOf<Null<Float>>;
+    public var nodeInnerSize:SizeOpt;
 
     /**
      * Whether the known main size of the node (if any) is definite. This is `false` when a parent

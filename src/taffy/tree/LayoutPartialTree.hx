@@ -10,6 +10,8 @@ import taffy.geometry.Size;
 import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
 import taffy.style.Style;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.SizeAvail;
 
 /**
  * Any type that implements `LayoutPartialTree` can be laid out using Taffy's algorithms.
@@ -48,9 +50,9 @@ class LayoutPartialTreeExt {
     public static function measureChildSize(
         tree:LayoutPartialTree,
         nodeId:NodeId,
-        knownDimensions:SizeOf<Null<Float>>,
-        parentSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>,
+        knownDimensions:SizeOpt,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
         sizingMode:SizingMode,
         axis:AbsoluteAxis,
         verticalMarginsAreCollapsible:LineOf<Bool>
@@ -71,9 +73,9 @@ class LayoutPartialTreeExt {
     public static function measureChildSizeBoth(
         tree:LayoutPartialTree,
         nodeId:NodeId,
-        knownDimensions:SizeOf<Null<Float>>,
-        parentSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>,
+        knownDimensions:SizeOpt,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
         sizingMode:SizingMode,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):Size {
@@ -93,9 +95,9 @@ class LayoutPartialTreeExt {
     public static function performChildLayout(
         tree:LayoutPartialTree,
         nodeId:NodeId,
-        knownDimensions:SizeOf<Null<Float>>,
-        parentSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>,
+        knownDimensions:SizeOpt,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
         sizingMode:SizingMode,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):LayoutOutput {

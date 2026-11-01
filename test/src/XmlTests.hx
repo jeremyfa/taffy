@@ -11,6 +11,8 @@ import taffy.geometry.PointOf;
 import taffy.geometry.RectOf;
 import taffy.geometry.Size;
 import taffy.geometry.SizeOf;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
 import taffy.style.AlignContent;
 import taffy.style.AlignItems;
 import taffy.style.AvailableSpace;
@@ -36,6 +38,8 @@ import taffy.tree.LayoutInput;
 import taffy.tree.LayoutOutput;
 import taffy.tree.NodeId;
 import taffy.tree.TaffyTree;
+import taffy.style.AvailableSpace.Definite;
+import taffy.geometry.SizeAvail;
 
 using StringTools;
 using taffy.style.AvailableSpace;
@@ -68,7 +72,7 @@ class TestNodeContext {
     static inline final H_WIDTH:Float = 10.0;
     static inline final H_HEIGHT:Float = 10.0;
 
-    public function measure(knownDimensions:SizeOf<Null<Float>>, availableSpace:SizeOf<AvailableSpace>):Size {
+    public function measure(knownDimensions:SizeOpt, availableSpace:SizeAvail):Size {
         final inlineAxis:AbsoluteAxis = writingMode == Horizontal ? Horizontal : Vertical;
         final blockAxis = inlineAxis.otherAxis();
         final lines = textContent.split("​");
@@ -85,21 +89,21 @@ class TestNodeContext {
         }
 
         final knownInline = knownDimensions.getAbs(inlineAxis);
-        var inlineSize:Float = if (knownInline != null) {
-            knownInline;
+        var inlineSize:Float = if (knownInline.isSome()) {
+            knownInline.unwrap();
         }
         else {
             switch availableSpace.getAbs(inlineAxis) {
                 case MinContent: minLineLength * H_WIDTH;
                 case MaxContent: maxLineLength * H_WIDTH;
-                case Definite(inlineSize): Math.min(inlineSize, maxLineLength * H_WIDTH);
+                case definite: Math.min(definite.definiteValue(), maxLineLength * H_WIDTH);
             }
         }
         inlineSize = Math.max(inlineSize, minLineLength * H_WIDTH);
 
         final knownBlock = knownDimensions.getAbs(blockAxis);
-        final blockSize:Float = if (knownBlock != null) {
-            knownBlock;
+        final blockSize:Float = if (knownBlock.isSome()) {
+            knownBlock.unwrap();
         }
         else {
             final inlineLineLength = Math.floor(inlineSize / H_WIDTH);
@@ -204,6 +208,9 @@ class FixtureResult {
  */
 class XmlTests {
 
+    /** When set (`--dump <file>` of the runner), receives the computed layout of every fixture */
+    public static var dump:Null<StringBuf> = null;
+
     public static final CATEGORIES = ["block", "blockflex", "blockgrid", "contain", "flex", "float", "grid", "gridflex", "leaf"];
 
     /** Run a single fixture from its XML source */
@@ -215,7 +222,7 @@ class XmlTests {
         final input = firstChildElement(root, "input");
         final expectations = firstChildElement(root, "expectations");
 
-        final availableSpace = new SizeOf<AvailableSpace>(
+        final availableSpace = new SizeAvail(
             parseOr(viewport.get("width"), AvailableSpaceTools.parse, MaxContent),
             parseOr(viewport.get("height"), AvailableSpaceTools.parse, MaxContent)
         );
@@ -232,6 +239,8 @@ class XmlTests {
         tree.computeLayoutWithMeasure(rootNodeId, availableSpace, testMeasureFunction);
 
         final actual = getComputedExpectations(tree, rootNodeId);
+        if (dump != null)
+            actual.writeTree(dump, "  ");
         if (expected.matches(actual))
             return new FixtureResult(true, "");
         final buf = new StringBuf();
@@ -245,15 +254,15 @@ class XmlTests {
     /** The measure function used by the fixtures (`test_measure_function`) */
     public static function testMeasureFunction(inputs:LayoutInput, nodeId:NodeId, context:Null<TestNodeContext>, style:Style):LayoutOutput {
         return Leaf.computeLeafLayout(inputs, style, (knownDimensions, availableSpace) -> {
-            if (knownDimensions.width != null && knownDimensions.height != null)
-                return new Size(knownDimensions.width, knownDimensions.height);
+            if (knownDimensions.width.isSome() && knownDimensions.height.isSome())
+                return new Size(knownDimensions.width.unwrap(), knownDimensions.height.unwrap());
             if (context == null)
-                return new Size(knownDimensions.width != null ? knownDimensions.width : 0.0, knownDimensions.height != null ? knownDimensions.height : 0.0);
+                return new Size(knownDimensions.width.isSome() ? knownDimensions.width.unwrap() : 0.0, knownDimensions.height.isSome() ? knownDimensions.height.unwrap() : 0.0);
             context.count++;
             final computeSize = context.measure(knownDimensions, availableSpace);
             return new Size(
-                knownDimensions.width != null ? knownDimensions.width : computeSize.width,
-                knownDimensions.height != null ? knownDimensions.height : computeSize.height
+                knownDimensions.width.isSome() ? knownDimensions.width.unwrap() : computeSize.width,
+                knownDimensions.height.isSome() ? knownDimensions.height.unwrap() : computeSize.height
             );
         });
     }
@@ -383,7 +392,7 @@ class XmlTests {
         final ar = x.get("aspect-ratio");
         if (ar != null) {
             final v = Std.parseFloat(ar);
-            style.aspectRatio = Math.isNaN(v) ? null : v;
+            style.aspectRatio = Math.isNaN(v) ? OptionalFloat.NONE : OptionalFloat.some(v);
         }
         style.alignItems = parseOr(x.get("align-items"), AlignItems.parse, AlignItems.NORMAL);
         style.alignSelf = parseSelfAlignment(x.get("align-self"));

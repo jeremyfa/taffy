@@ -10,6 +10,7 @@ import taffy.style.Clear;
 import taffy.style.Direction;
 import taffy.style.FloatDirection;
 import taffy.util.Sys;
+import taffy.util.OptionalFloat;
 
 /**
  * A non-overlapping horizontal segment of the Block Formatting Context container
@@ -149,10 +150,10 @@ class FloatContext {
     final lastPlacedFloatsEnd:Array<Int> = [0, 0];
 
     /** The bottom (y + height) of the lowest float placed on each side, including zero-sized floats */
-    final clearBottoms:Array<Null<Float>> = [null, null];
+    final clearBottoms:Array<OptionalFloat> = [OptionalFloat.NONE, OptionalFloat.NONE];
 
     /** The topmost y position allowed for a new float (CSS2 float rule 5), including the tops of zero-sized floats */
-    var floatCeiling:Null<Float> = null;
+    var floatCeiling:OptionalFloat = OptionalFloat.NONE;
 
     /** Create a new empty `FloatContext` */
     public function new() {}
@@ -247,9 +248,9 @@ class FloatContext {
         final slot:Int = direction;
         final bottom = placedFloatedBox.y + placedFloatedBox.height;
         final prevBottom = clearBottoms[slot];
-        clearBottoms[slot] = prevBottom == null ? bottom : Sys.f32Max(prevBottom, bottom);
+        clearBottoms[slot] = prevBottom.isNone() ? OptionalFloat.some(bottom) : OptionalFloat.some(Sys.f32Max(prevBottom.unwrap(), bottom));
         final y = placedFloatedBox.y;
-        floatCeiling = floatCeiling == null ? y : Sys.f32Max(floatCeiling, y);
+        floatCeiling = floatCeiling.isNone() ? OptionalFloat.some(y) : OptionalFloat.some(Sys.f32Max(floatCeiling.unwrap(), y));
         final xInset = placedFloatedBox.xInset;
         if (direction == FloatDirection.Left) {
             leftFloatsList.push(placedFloatedBox);
@@ -282,7 +283,7 @@ class FloatContext {
         // Floats (including zero-sized floats) that occupy no segment still constrain the
         // position of later boxes: rule 5 and `clear`
         final threshold = clearedThreshold(clear);
-        minY = Sys.f32Max(Sys.f32Max(minY, floatCeiling != null ? (floatCeiling : Float) : Math.NEGATIVE_INFINITY), threshold != null ? (threshold : Float) : Math.NEGATIVE_INFINITY);
+        minY = Sys.f32Max(Sys.f32Max(minY, floatCeiling.isSome() ? floatCeiling.unwrap() : Math.NEGATIVE_INFINITY), threshold.isSome() ? threshold.unwrap() : Math.NEGATIVE_INFINITY);
 
         // Ensure that float:
         //    - Starts at or after the last placed float in either direction (CSS2 float rule 5)
@@ -455,15 +456,15 @@ class FloatContext {
     }
 
     /** Get the bottom of lowest relevant float for the specific clear property */
-    public function clearedThreshold(clear:Clear):Null<Float> {
+    public function clearedThreshold(clear:Clear):OptionalFloat {
         return switch clear {
             case Clear.Left: clearBottoms[0];
             case Clear.Right: clearBottoms[1];
             case Clear.Both:
                 final l = clearBottoms[0];
                 final r = clearBottoms[1];
-                if (l != null && r != null) Sys.f32Max(l, r) else (l != null ? l : r);
-            case Clear.None: null;
+                if (l.isSome() && r.isSome()) OptionalFloat.some(Sys.f32Max(l.unwrap(), r.unwrap())) else (l.isSome() ? l : r);
+            case Clear.None: OptionalFloat.NONE;
         }
     }
 
@@ -475,7 +476,7 @@ class FloatContext {
 
         // Clearance clears past the bottom of floats on the relevant side, including zero-sized floats
         final threshold = clearedThreshold(clear);
-        minY = Sys.f32Max(minY, threshold != null ? (threshold : Float) : Math.NEGATIVE_INFINITY);
+        minY = Sys.f32Max(minY, threshold.isSome() ? threshold.unwrap() : Math.NEGATIVE_INFINITY);
 
         // The min starting segment index
         final atLeast = after != -1 ? after + 1 : 0;
@@ -518,7 +519,7 @@ class FloatContext {
 
         // Clearance clears past the bottom of floats on the relevant side, including zero-sized floats
         final threshold = clearedThreshold(clear);
-        minY = Sys.f32Max(minY, threshold != null ? (threshold : Float) : Math.NEGATIVE_INFINITY);
+        minY = Sys.f32Max(minY, threshold.isSome() ? threshold.unwrap() : Math.NEGATIVE_INFINITY);
 
         // The min starting segment index
         final atLeast = after != -1 ? after + 1 : 0;

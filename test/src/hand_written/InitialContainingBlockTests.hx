@@ -15,6 +15,7 @@ import taffy.style.LengthPercentageAuto;
 import taffy.style.Position;
 import taffy.style.Style;
 import taffy.tree.TaffyTree;
+import taffy.geometry.SizeAvail;
 
 /**
  * Tests for the initial containing block: boxes with no nearer containing block are positioned
@@ -32,7 +33,7 @@ class InitialContainingBlockTests {
         ];
     }
 
-    static final VIEWPORT:SizeOf<AvailableSpace> = definite(800.0, 600.0);
+    static final VIEWPORT:SizeAvail = definite(800.0, 600.0);
 
     static function rootStyle():Style {
         return st(s -> {

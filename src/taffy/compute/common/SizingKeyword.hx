@@ -16,6 +16,11 @@ import taffy.tree.LayoutPartialTree;
 import taffy.tree.NodeId;
 import taffy.tree.SizingMode;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.RectOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.tree.LayoutPartialTree;
 
@@ -47,17 +52,17 @@ class SizingKeyword {
      *
      * Returns null if the size style is not a sizing keyword, or if it cannot be resolved in the current context.
      */
-    public static function resolveSizingKeyword(style:Dimension, stretchSize:Null<Float>, percentResolutionBasis:Null<Float>):Null<SizingKeywordResolution> {
+    public static function resolveSizingKeyword(style:Dimension, stretchSize:OptionalFloat, percentResolutionBasis:OptionalFloat):Null<SizingKeywordResolution> {
         return switch style.tag() {
             case CompactLength.MIN_CONTENT_TAG: Measure(MinContent);
             case CompactLength.MAX_CONTENT_TAG: Measure(MaxContent);
             case CompactLength.FIT_CONTENT_PX_TAG: Measure(Definite(style.value()));
             case CompactLength.FIT_CONTENT_PERCENT_TAG:
-                percentResolutionBasis != null ? Measure(Definite((percentResolutionBasis : Float) * style.value())) : null;
+                percentResolutionBasis.isSome() ? Measure(Definite(percentResolutionBasis.unwrap() * style.value())) : null;
             case CompactLength.FIT_CONTENT_KEYWORD_TAG:
-                stretchSize != null ? Measure(Definite(stretchSize)) : null;
+                stretchSize.isSome() ? Measure(Definite(stretchSize.unwrap())) : null;
             case CompactLength.STRETCH_TAG:
-                stretchSize != null ? Exact(stretchSize) : null;
+                stretchSize.isSome() ? Exact(stretchSize.unwrap()) : null;
             case _: null;
         }
     }
@@ -72,13 +77,13 @@ class SizingKeyword {
     public static function resolveAbsoluteSizingKeywords(
         tree:LayoutPartialTree,
         node:NodeId,
-        knownDimensions:SizeOf<Null<Float>>,
+        knownDimensions:SizeOpt,
         sizeStyle:SizeOf<Dimension>,
         areaSize:Size,
-        inset:RectOf<Null<Float>>,
-        margin:RectOf<Null<Float>>,
+        inset:RectOpt,
+        margin:RectOpt,
         sizingMode:SizingMode
-    ):SizeOf<Null<Float>> {
+    ):SizeOpt {
         final stretchWidth = Sys.f32Max(
             areaSize.width - nz(inset.left) - nz(inset.right) - nz(margin.left) - nz(margin.right),
             0.0
@@ -88,8 +93,8 @@ class SizingKeyword {
             0.0
         );
 
-        final keywordWidth = knownDimensions.width == null ? resolveSizingKeyword(sizeStyle.width, stretchWidth, areaSize.width) : null;
-        final keywordHeight = knownDimensions.height == null ? resolveSizingKeyword(sizeStyle.height, stretchHeight, areaSize.height) : null;
+        final keywordWidth = knownDimensions.width.isNone() ? resolveSizingKeyword(sizeStyle.width, OptionalFloat.some(stretchWidth), OptionalFloat.some(areaSize.width)) : null;
+        final keywordHeight = knownDimensions.height.isNone() ? resolveSizingKeyword(sizeStyle.height, OptionalFloat.some(stretchHeight), OptionalFloat.some(areaSize.height)) : null;
 
         // If both axes need to be measured then resolve them with a single measure call
         if (keywordWidth != null && keywordHeight != null) {
@@ -97,9 +102,9 @@ class SizingKeyword {
                 case [Measure(availableWidth), Measure(availableHeight)]:
                     final measuredSize = tree.measureChildSizeBoth(
                         node,
-                        new SizeOf<Null<Float>>(null, null),
+                        new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE),
                         areaSize.toOptions(),
-                        new SizeOf<AvailableSpace>(availableWidth, availableHeight),
+                        new SizeAvail(availableWidth, availableHeight),
                         sizingMode,
                         FALSE_LINE
                     );
@@ -117,13 +122,13 @@ class SizingKeyword {
                         node,
                         result,
                         areaSize.toOptions(),
-                        new SizeOf<AvailableSpace>(availableWidth, Definite(stretchHeight)),
+                        new SizeAvail(availableWidth, Definite(stretchHeight)),
                         sizingMode,
                         Horizontal,
                         FALSE_LINE
                     );
             }
-            result = result.withWidth(width);
+            result = result.withWidth(OptionalFloat.some(width));
         }
         if (keywordHeight != null) {
             final height:Float = switch keywordHeight {
@@ -133,19 +138,19 @@ class SizingKeyword {
                         node,
                         result,
                         areaSize.toOptions(),
-                        new SizeOf<AvailableSpace>(result.width != null ? Definite(result.width) : Definite(stretchWidth), availableHeight),
+                        new SizeAvail(result.width.isSome() ? Definite(result.width.unwrap()) : Definite(stretchWidth), availableHeight),
                         sizingMode,
                         Vertical,
                         FALSE_LINE
                     );
             }
-            result = result.withHeight(height);
+            result = result.withHeight(OptionalFloat.some(height));
         }
         return result;
     }
 
-    static inline function nz(v:Null<Float>):Float {
-        return v != null ? (v : Float) : 0.0;
+    static inline function nz(v:OptionalFloat):Float {
+        return v.isSome() ? v.unwrap() : 0.0;
     }
 
 }

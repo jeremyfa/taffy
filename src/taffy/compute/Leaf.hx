@@ -16,6 +16,10 @@ import taffy.tree.CollapsibleMarginSet;
 import taffy.tree.LayoutInput;
 import taffy.tree.LayoutOutput;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.style.AvailableSpace;
@@ -25,7 +29,7 @@ using taffy.util.Resolve;
 /**
  * The measure function of a leaf node: `(knownDimensions, availableSpace) -> size`
  */
-typedef LeafMeasureFunction = (knownDimensions:SizeOf<Null<Float>>, availableSpace:SizeOf<AvailableSpace>) -> Size;
+typedef LeafMeasureFunction = (knownDimensions:SizeOpt, availableSpace:SizeAvail) -> Size;
 
 /**
  * Computes the layout of leaf nodes
@@ -56,16 +60,16 @@ class Leaf {
 
         // Resolve node's preferred/min/max sizes (width/heights) against the available space (percentages resolve to pixel values)
         // For ContentSize mode, we pretend that the node has no size styles as these should be ignored.
-        var nodeSize:SizeOf<Null<Float>>;
-        var nodeMinSize:SizeOf<Null<Float>>;
-        var nodeMaxSize:SizeOf<Null<Float>>;
-        var aspectRatio:Null<Float>;
+        var nodeSize:SizeOpt;
+        var nodeMinSize:SizeOpt;
+        var nodeMaxSize:SizeOpt;
+        var aspectRatio:OptionalFloat;
         switch sizingMode {
             case ContentSize:
                 nodeSize = knownDimensions;
-                nodeMinSize = OptionSizeTools.NONE;
-                nodeMaxSize = OptionSizeTools.NONE;
-                aspectRatio = null;
+                nodeMinSize = SizeOpt.NONE;
+                nodeMaxSize = SizeOpt.NONE;
+                aspectRatio = OptionalFloat.NONE;
             case InherentSize:
                 aspectRatio = style.aspectRatio;
                 final styleSize = style.size.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
@@ -101,15 +105,15 @@ class Leaf {
             || padding.bottom > 0.0
             || border.top > 0.0
             || border.bottom > 0.0
-            || (nodeSizeHeight != null && nodeSizeHeight > 0.0)
-            || (nodeMinSizeHeight != null && nodeMinSizeHeight > 0.0);
+            || (nodeSizeHeight.isSome() && nodeSizeHeight.unwrap() > 0.0)
+            || (nodeMinSizeHeight.isSome() && nodeMinSizeHeight.unwrap() > 0.0);
 
         // Return early if both width and height are known
         if (runMode == ComputeSize && hasStylesPreventingBeingCollapsedThrough) {
             final width = nodeSize.width;
             final height = nodeSize.height;
-            if (width != null && height != null) {
-                final size = new Size(width, height).maybeClamp(nodeMinSize, nodeMaxSize).maybeMax(paddingBorder.sumAxes().toOptions());
+            if (width.isSome() && height.isSome()) {
+                final size = new Size(width.unwrap(), height.unwrap()).maybeClamp(nodeMinSize, nodeMaxSize).maybeMax(paddingBorder.sumAxes().toOptions());
                 return new LayoutOutput(size, Rect.ZERO, Baselines.NONE, CollapsibleMarginSet.ZERO, CollapsibleMarginSet.ZERO, false);
             }
         }
@@ -121,28 +125,22 @@ class Leaf {
         final nodeMaxSizeH = nodeMaxSize.height;
         final insetH = contentBoxInset.horizontalAxisSum();
         final insetV = contentBoxInset.verticalAxisSum();
-        final availWidth = (knownDimensions.width != null ? Definite(knownDimensions.width) : availableSpace.width)
+        final availWidth = (knownDimensions.width.isSome() ? Definite(knownDimensions.width.unwrap()) : availableSpace.width)
             .maybeSet(knownDimensions.width)
             .maybeSet(nodeSize.width);
-        final availHeight = (knownDimensions.height != null ? Definite(knownDimensions.height) : availableSpace.height)
+        final availHeight = (knownDimensions.height.isSome() ? Definite(knownDimensions.height.unwrap()) : availableSpace.height)
             .maybeSet(knownDimensions.height)
             .maybeSet(nodeSize.height);
-        final measureAvailableSpace = new SizeOf<AvailableSpace>(
-            switch availWidth {
-                case Definite(size): Definite(size.maybeClampF(nodeMinSizeW, nodeMaxSizeW) - insetH);
-                case _: availWidth;
-            },
-            switch availHeight {
-                case Definite(size): Definite(size.maybeClampF(nodeMinSizeH, nodeMaxSizeH) - insetV);
-                case _: availHeight;
-            }
+        final measureAvailableSpace = new SizeAvail(
+            availWidth.isDefinite() ? Definite(availWidth.definiteValue().maybeClampF(nodeMinSizeW, nodeMaxSizeW) - insetH) : availWidth,
+            availHeight.isDefinite() ? Definite(availHeight.definiteValue().maybeClampF(nodeMinSizeH, nodeMaxSizeH) - insetV) : availHeight
         );
 
         // Measure node
         final measuredSize = measureFunction(
             switch runMode {
                 case ComputeSize: knownDimensions;
-                case PerformLayout: OptionSizeTools.NONE;
+                case PerformLayout: SizeOpt.NONE;
                 case PerformHiddenLayout: throw 'unreachable';
             },
             measureAvailableSpace
@@ -153,7 +151,7 @@ class Leaf {
             .maybeClamp(nodeMinSize, nodeMaxSize);
         var size = new Size(
             clampedSize.width,
-            Sys.f32Max(clampedSize.height, aspectRatio != null ? clampedSize.width / (aspectRatio : Float) : 0.0)
+            Sys.f32Max(clampedSize.height, aspectRatio.isSome() ? clampedSize.width / aspectRatio.unwrap() : 0.0)
         );
         size = size.maybeMax(paddingBorder.sumAxes().toOptions());
 

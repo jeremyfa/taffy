@@ -27,6 +27,12 @@ class RectOf<T> {
     public final bottom:T;
 
     public inline function new(left:T, right:T, top:T, bottom:T) {
+        #if taffy_census
+        taffy.util.Census.any(left, 'RectOf.new');
+        taffy.util.Census.any(right, 'RectOf.new');
+        taffy.util.Census.any(top, 'RectOf.new');
+        taffy.util.Census.any(bottom, 'RectOf.new');
+        #end
         this.left = left;
         this.right = right;
         this.top = top;
@@ -96,26 +102,6 @@ class RectOf<T> {
 
     public function toString():String {
         return 'Rect(left: $left, right: $right, top: $top, bottom: $bottom)';
-    }
-
-}
-
-/**
- * Helpers for `RectOf<Null<Float>>` (Rust `Rect<Option<f32>>`).
- */
-class OptionRectTools {
-
-    /** A `RectOf<Null<Float>>` with all sides set to `null` (Rust `Rect::NONE`) */
-    public static final NONE:RectOf<Null<Float>> = new RectOf<Null<Float>>(null, null, null, null);
-
-    /** Replace `null` sides with `alt` */
-    public static inline function unwrapOr(self:RectOf<Null<Float>>, alt:Float):Rect {
-        return new Rect(
-            self.left != null ? (self.left : Float) : alt,
-            self.right != null ? (self.right : Float) : alt,
-            self.top != null ? (self.top : Float) : alt,
-            self.bottom != null ? (self.bottom : Float) : alt
-        );
     }
 
 }

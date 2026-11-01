@@ -16,6 +16,8 @@ import taffy.style.FlexDirection;
 import taffy.style.Overflow;
 import taffy.tree.NodeId;
 import taffy.tree.OofCandidates;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
 
 /**
  * The intermediate results of a flexbox calculation for a single item
@@ -29,7 +31,7 @@ class FlexItem {
     public var order:Int;
 
     /** The base size of this item */
-    public var size:SizeOf<Null<Float>>;
+    public var size:SizeOpt;
 
     /**
      * The raw size style of this item. Used to detect and resolve sizing
@@ -38,13 +40,13 @@ class FlexItem {
     public var sizeStyle:SizeOf<Dimension>;
 
     /** The minimum allowable size of this item */
-    public var minSize:SizeOf<Null<Float>>;
+    public var minSize:SizeOpt;
 
     /** The maximum allowable size of this item */
-    public var maxSize:SizeOf<Null<Float>>;
+    public var maxSize:SizeOpt;
 
     /** The aspect ratio of this item */
-    public var aspectRatio:Null<Float>;
+    public var aspectRatio:OptionalFloat;
 
     /** The cross-alignment of this item */
     public var alignSelf:AlignItems;
@@ -149,11 +151,11 @@ class FlexItem {
     public function new(
         node:NodeId,
         order:Int,
-        size:SizeOf<Null<Float>>,
+        size:SizeOpt,
         sizeStyle:SizeOf<Dimension>,
-        minSize:SizeOf<Null<Float>>,
-        maxSize:SizeOf<Null<Float>>,
-        aspectRatio:Null<Float>,
+        minSize:SizeOpt,
+        maxSize:SizeOpt,
+        aspectRatio:OptionalFloat,
         relativeInset:Size,
         margin:Rect,
         marginIsAuto:RectOf<Bool>,

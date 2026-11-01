@@ -5,5 +5,6 @@
 -cp src
 -main Main
 -D analyzer-optimize
+-D taffy_literal_check
 -cpp bin/cpp
 --macro addGlobalMetadata('taffy', '@:build(taffy.util.F32.build())')

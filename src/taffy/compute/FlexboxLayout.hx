@@ -47,6 +47,11 @@ import taffy.tree.RequestedAxis;
 import taffy.tree.RunMode;
 import taffy.tree.SizingMode;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.RectOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.style.AvailableSpace;
@@ -104,11 +109,11 @@ class FlexboxLayout {
                 .maybeClamp(minSize, maxSize);
         }
         else {
-            OptionSizeTools.NONE;
+            SizeOpt.NONE;
         }
 
         // If both min and max in a given axis are set and max <= min then this determines the size in that axis
-        final minMaxDefiniteSize = new SizeOf<Null<Float>>(
+        final minMaxDefiniteSize = new SizeOpt(
             minMaxDefinite(minSize.width, maxSize.width),
             minMaxDefinite(minSize.height, maxSize.height)
         );
@@ -121,14 +126,14 @@ class FlexboxLayout {
         if (runMode == RunMode.ComputeSize) {
             final w = styledBasedKnownDimensions.width;
             final h = styledBasedKnownDimensions.height;
-            if (w != null && h != null) {
-                return LayoutOutput.fromOuterSize(new Size(w, h));
+            if (w.isSome() && h.isSome()) {
+                return LayoutOutput.fromOuterSize(new Size(w.unwrap(), h.unwrap()));
             }
 
             // We can also short-circuit if the width is known and only the width has been requested.
             if (inputs.axis == RequestedAxis.Horizontal) {
-                if (w != null) {
-                    return LayoutOutput.fromOuterSize(new Size(w, 0.0));
+                if (w.isSome()) {
+                    return LayoutOutput.fromOuterSize(new Size(w.unwrap(), 0.0));
                 }
             }
         }
@@ -136,8 +141,8 @@ class FlexboxLayout {
         // Normalize the definiteness flags: they only apply to dimensions which were passed in as known
         // by the parent. Dimensions resolved from the node's own style are always definite.
         final knownDimensionsAreDefinite = new SizeOf<Bool>(
-            inputs.knownDimensionsAreDefinite.width || knownDimensions.width == null,
-            inputs.knownDimensionsAreDefinite.height || knownDimensions.height == null
+            inputs.knownDimensionsAreDefinite.width || knownDimensions.width.isNone(),
+            inputs.knownDimensionsAreDefinite.height || knownDimensions.height.isNone()
         );
 
         final output = computePreliminary(tree, node, new LayoutInput(
@@ -159,8 +164,8 @@ class FlexboxLayout {
         return output;
     }
 
-    static inline function minMaxDefinite(min:Null<Float>, max:Null<Float>):Null<Float> {
-        return (min != null && max != null && (max : Float) <= (min : Float)) ? min : null;
+    static inline function minMaxDefinite(min:OptionalFloat, max:OptionalFloat):OptionalFloat {
+        return (min.isSome() && max.isSome() && max.unwrap() <= min.unwrap()) ? min : OptionalFloat.NONE;
     }
 
     /** Compute a preliminary size for an item */
@@ -209,8 +214,8 @@ class FlexboxLayout {
         // If container size is undefined, determine the container's main size
         // and then re-resolve gaps based on newly determined size
         final innerMain = constants.nodeInnerSize.main(constants.dir);
-        if (innerMain != null) {
-            final innerMainSize:Float = innerMain;
+        if (innerMain.isSome()) {
+            final innerMainSize:Float = innerMain.unwrap();
             final outerMainSize = innerMainSize + constants.contentBoxInset.mainAxisSum(constants.dir);
             constants.innerContainerSize = constants.innerContainerSize.withMain(constants.dir, innerMainSize);
             constants.containerSize = constants.containerSize.withMain(constants.dir, outerMainSize);
@@ -218,13 +223,13 @@ class FlexboxLayout {
         else {
             // Sets constants.containerSize and constants.outerContainerSize
             determineContainerMainSize(tree, availableSpace, flexLines, constants);
-            constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, constants.innerContainerSize.main(constants.dir));
-            constants.nodeOuterSize = constants.nodeOuterSize.withMain(constants.dir, constants.containerSize.main(constants.dir));
+            constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.some(constants.innerContainerSize.main(constants.dir)));
+            constants.nodeOuterSize = constants.nodeOuterSize.withMain(constants.dir, OptionalFloat.some(constants.containerSize.main(constants.dir)));
 
             // Re-resolve percentage gaps
             final style = tree.getFlexboxContainerStyle(node);
             final innerContainerSize = constants.innerContainerSize.main(constants.dir);
-            final newGap = style.gap.main(constants.dir).maybeResolve(innerContainerSize).unwrapOr(0.0);
+            final newGap = style.gap.main(constants.dir).maybeResolve(OptionalFloat.some(innerContainerSize)).unwrapOr(0.0);
             constants.gap = constants.gap.withMain(constants.dir, newGap);
         }
 
@@ -317,9 +322,9 @@ class FlexboxLayout {
                 tree.setUnroundedLayout(child, Layout.withOrder(order));
                 tree.performChildLayout(
                     child,
-                    OptionSizeTools.NONE,
-                    OptionSizeTools.NONE,
-                    AvailableSpaceSizeTools.MAX_CONTENT,
+                    SizeOpt.NONE,
+                    SizeOpt.NONE,
+                    SizeAvail.MAX_CONTENT,
                     SizingMode.ContentSize,
                     FALSE_LINE
                 );
@@ -331,7 +336,7 @@ class FlexboxLayout {
         // The baselines are generated from the startmost flex line, where "startmost" refers to the
         // line's visual position: for wrap-reverse containers the cross axis is flipped, so the
         // startmost line is the last line in flex-line order rather than the first.
-        var firstVerticalBaseline:Null<Float> = null;
+        var firstVerticalBaseline:OptionalFloat = OptionalFloat.NONE;
         if (flexLines.length > 0) {
             final firstLine = constants.isWrapReverse ? flexLines[flexLines.length - 1] : flexLines[0];
             final items = firstLine.items;
@@ -340,7 +345,7 @@ class FlexboxLayout {
                     // For column containers the baseline is generated from the startmost item in the line,
                     // which for reverse-direction containers is the last item in flex order.
                     final item = constants.dir.isReverse() ? items[items.length - 1] : items[0];
-                    firstVerticalBaseline = item.baseline;
+                    firstVerticalBaseline = OptionalFloat.some(item.baseline);
                 }
                 else {
                     var found:FlexItem = null;
@@ -352,7 +357,7 @@ class FlexboxLayout {
                     }
                     if (found == null)
                         found = items[0];
-                    firstVerticalBaseline = found.baseline;
+                    firstVerticalBaseline = OptionalFloat.some(found.baseline);
                 }
             }
         }
@@ -378,10 +383,10 @@ class FlexboxLayout {
     /** Compute constants that can be reused during the flexbox algorithm. */
     static function computeConstants(
         style:Style,
-        knownDimensions:SizeOf<Null<Float>>,
+        knownDimensions:SizeOpt,
         knownDimensionsAreDefinite:SizeOf<Bool>,
-        parentSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail
     ):AlgoConstants {
         final dir = style.flexDirection;
         final isRow = dir.isRow();
@@ -430,12 +435,12 @@ class FlexboxLayout {
         final nodeOuterSize = knownDimensions;
         final nodeInnerSize = nodeOuterSize.maybeSubSize(contentBoxInset.sumAxes());
         final knownMainSizeIsDefinite = knownDimensionsAreDefinite.main(dir);
-        final hasDefiniteMainSize = knownMainSizeIsDefinite && knownDimensions.main(dir) != null;
-        final hasDefiniteCrossSize = knownDimensionsAreDefinite.cross(dir) && knownDimensions.cross(dir) != null;
+        final hasDefiniteMainSize = knownMainSizeIsDefinite && knownDimensions.main(dir).isSome();
+        final hasDefiniteCrossSize = knownDimensionsAreDefinite.cross(dir) && knownDimensions.cross(dir).isSome();
         final crossAxisAvailableSpaceIsDefinite = hasDefiniteCrossSize || availableSpace.cross(dir).isDefinite();
-        final gapContext = new SizeOf<Null<Float>>(
-            nodeInnerSize.width != null ? nodeInnerSize.width : 0.0,
-            nodeInnerSize.height != null ? nodeInnerSize.height : 0.0
+        final gapContext = new SizeOpt(
+            nodeInnerSize.width.isSome() ? nodeInnerSize.width : OptionalFloat.some(0.0),
+            nodeInnerSize.height.isSome() ? nodeInnerSize.height : OptionalFloat.some(0.0)
         );
         final gap = style.gap.resolveOrZero(gapContext);
 
@@ -473,7 +478,7 @@ class FlexboxLayout {
      * Resolve a `position: relative` item's inset to a single offset in the container's flex axes,
      * accounting for flex direction and writing direction.
      */
-    static function resolveRelativeInset(inset:RectOf<Null<Float>>, constants:AlgoConstants):Size {
+    static function resolveRelativeInset(inset:RectOpt, constants:AlgoConstants):Size {
         final direction = constants.dir;
         final isRtlRow = direction.isRow() && constants.layoutDirection.isRtl();
         final isRtlColumn = direction.isColumn() && constants.layoutDirection.isRtl();
@@ -482,16 +487,16 @@ class FlexboxLayout {
         final crossStart = inset.crossStart(direction);
         final crossEnd = inset.crossEnd(direction);
         final main:Float = if (isRtlRow) {
-            mainEnd != null ? (mainEnd : Float) : (mainStart != null ? -(mainStart : Float) : 0.0);
+            mainEnd.isSome() ? mainEnd.unwrap() : (mainStart.isSome() ? -mainStart.unwrap() : 0.0);
         }
         else {
-            mainStart != null ? (mainStart : Float) : (mainEnd != null ? -(mainEnd : Float) : 0.0);
+            mainStart.isSome() ? mainStart.unwrap() : (mainEnd.isSome() ? -mainEnd.unwrap() : 0.0);
         };
         final cross:Float = if (isRtlColumn) {
-            crossEnd != null ? -(crossEnd : Float) : (crossStart != null ? (crossStart : Float) : 0.0);
+            crossEnd.isSome() ? -crossEnd.unwrap() : (crossStart.isSome() ? crossStart.unwrap() : 0.0);
         }
         else {
-            crossStart != null ? (crossStart : Float) : (crossEnd != null ? -(crossEnd : Float) : 0.0);
+            crossStart.isSome() ? crossStart.unwrap() : (crossEnd.isSome() ? -crossEnd.unwrap() : 0.0);
         };
         return Size.ZERO.withMain(direction, main).withCross(direction, cross);
     }
@@ -509,7 +514,7 @@ class FlexboxLayout {
         // as indefinite here.
         final percentResolutionSize = constants.knownMainSizeIsDefinite
             ? constants.nodeInnerSize
-            : constants.nodeInnerSize.withMain(constants.dir, null);
+            : constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.NONE);
 
         final items:Array<FlexItem> = [];
         final count = tree.childCount(node);
@@ -577,28 +582,28 @@ class FlexboxLayout {
      * Note: the flex container's margins have already been subtracted from `outerAvailableSpace` by its parent.
      */
     static function determineAvailableSpace(
-        knownDimensions:SizeOf<Null<Float>>,
-        outerAvailableSpace:SizeOf<AvailableSpace>,
+        knownDimensions:SizeOpt,
+        outerAvailableSpace:SizeAvail,
         constants:AlgoConstants
-    ):SizeOf<AvailableSpace> {
+    ):SizeAvail {
         // Note: min/max/preferred size styles have already been applied to knownDimensions in the `compute` function above
         final kw = knownDimensions.width;
-        final width = if (kw != null) {
-            Definite(Sys.f32Max((kw : Float) - constants.contentBoxInset.horizontalAxisSum(), 0.0));
+        final width = if (kw.isSome()) {
+            Definite(Sys.f32Max(kw.unwrap() - constants.contentBoxInset.horizontalAxisSum(), 0.0));
         }
         else {
-            outerAvailableSpace.width.maybeSub(constants.contentBoxInset.horizontalAxisSum()).maybeMax(0.0);
+            outerAvailableSpace.width.maybeSub(OptionalFloat.some(constants.contentBoxInset.horizontalAxisSum())).maybeMax(OptionalFloat.some(0.0));
         };
 
         final kh = knownDimensions.height;
-        final height = if (kh != null) {
-            Definite(Sys.f32Max((kh : Float) - constants.contentBoxInset.verticalAxisSum(), 0.0));
+        final height = if (kh.isSome()) {
+            Definite(Sys.f32Max(kh.unwrap() - constants.contentBoxInset.verticalAxisSum(), 0.0));
         }
         else {
-            outerAvailableSpace.height.maybeSub(constants.contentBoxInset.verticalAxisSum()).maybeMax(0.0);
+            outerAvailableSpace.height.maybeSub(OptionalFloat.some(constants.contentBoxInset.verticalAxisSum())).maybeMax(OptionalFloat.some(0.0));
         };
 
-        return new SizeOf<AvailableSpace>(width, height);
+        return new SizeAvail(width, height);
     }
 
     /**
@@ -628,7 +633,7 @@ class FlexboxLayout {
     static function determineFlexBaseSize(
         tree:LayoutFlexboxContainer,
         constants:AlgoConstants,
-        availableSpace:SizeOf<AvailableSpace>,
+        availableSpace:SizeAvail,
         flexItems:Array<FlexItem>
     ):Void {
         final dir = constants.dir;
@@ -638,7 +643,7 @@ class FlexboxLayout {
 
             // Parent size for child sizing
             final crossAxisParentSize = constants.nodeInnerSize.cross(dir);
-            final childParentSize = OptionSizeTools.fromCross(dir, crossAxisParentSize);
+            final childParentSize = SizeOpt.fromCross(dir, crossAxisParentSize);
 
             // Available space for child sizing (excluding the child's margins)
             // Min/max sizes transferred through the aspect ratio are taken into account here
@@ -650,20 +655,21 @@ class FlexboxLayout {
 
             // Clamp available space by min- and max- size
             final crossAxisAvailableSpace:AvailableSpace = switch availableSpace.cross(dir) {
-                case Definite(val):
+                case MinContent:
+                    childMinCross.isSome() ? Definite(childMinCross.unwrap()) : MinContent;
+                case MaxContent:
+                    childMaxCross.isSome() ? Definite(childMaxCross.unwrap()) : MaxContent;
+                case definite:
+                    final val = definite.definiteValue();
                     Definite(
                         Sys.f32Max(constants.dividedCrossSpace(crossAxisParentSize.unwrapOr(val)) - child.margin.crossAxisSum(dir), 0.0)
                             .maybeClampF(childMinCross, childMaxCross)
                     );
-                case MinContent:
-                    childMinCross != null ? Definite(childMinCross) : MinContent;
-                case MaxContent:
-                    childMaxCross != null ? Definite(childMaxCross) : MaxContent;
             }
 
             // Known dimensions for child sizing
-            var childCrossSizeIsDefinite = child.size.cross(dir) != null;
-            var childKnownDimensions = child.size.withMain(dir, null);
+            var childCrossSizeIsDefinite = child.size.cross(dir).isSome();
+            var childKnownDimensions = child.size.withMain(dir, OptionalFloat.NONE);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
             // transferred through an intrinsic aspect ratio (e.g. for replaced elements)
             // are based on the used cross size.
@@ -674,11 +680,11 @@ class FlexboxLayout {
             if (child.alignSelf == AlignItems.STRETCH
                 && !child.marginIsAuto.crossStart(constants.dir)
                 && !child.marginIsAuto.crossEnd(constants.dir)
-                && childKnownDimensions.cross(dir) == null) {
+                && childKnownDimensions.cross(dir).isNone()) {
                 childKnownDimensions = childKnownDimensions.withCross(dir, crossAxisAvailableSpace.intoOption());
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
-                childCrossSizeIsDefinite = !constants.isWrap && constants.hasDefiniteCrossSize && crossAxisParentSize != null;
+                childCrossSizeIsDefinite = !constants.isWrap && constants.hasDefiniteCrossSize && crossAxisParentSize.isSome();
             }
 
             // Percentage padding and border resolve against the container's inline size (its width),
@@ -695,9 +701,9 @@ class FlexboxLayout {
             // Percentage flex basis values resolve against the container's inner main size, but only
             // if that size is definite. A known main size which is derived from the container's own
             // content is treated as indefinite here.
-            final percentResolutionMainSize:Null<Float> = constants.knownMainSizeIsDefinite ? constants.nodeInnerSize.main(dir) : null;
+            final percentResolutionMainSize:OptionalFloat = constants.knownMainSizeIsDefinite ? constants.nodeInnerSize.main(dir) : OptionalFloat.NONE;
             final flexBasisStyle = childStyle.flexBasis;
-            final flexBasis = flexBasisStyle.maybeResolve(percentResolutionMainSize).maybeAdd(boxSizingAdjustment);
+            final flexBasis = flexBasisStyle.maybeResolve(percentResolutionMainSize).maybeAdd(OptionalFloat.some(boxSizingAdjustment));
 
             child.flexBasis = computeItemFlexBasis(
                 tree,
@@ -736,15 +742,15 @@ class FlexboxLayout {
             // be set to their usual values in the cross axis so that wrapping content can wrap correctly.
             //
             // See https://drafts.csswg.org/css-sizing-3/#min-percentage-contribution
-            final overflowMin:Null<Float> = dir.isRow() ? child.overflow.x.maybeIntoAutomaticMinSize() : child.overflow.y.maybeIntoAutomaticMinSize();
+            final overflowMin:OptionalFloat = dir.isRow() ? child.overflow.x.maybeIntoAutomaticMinSize() : child.overflow.y.maybeIntoAutomaticMinSize();
             final styleMinMainSize = child.minSize.main(dir).or(overflowMin);
 
-            child.resolvedMinimumMainSize = if (styleMinMainSize != null) {
-                (styleMinMainSize : Float);
+            child.resolvedMinimumMainSize = if (styleMinMainSize.isSome()) {
+                styleMinMainSize.unwrap();
             }
             else {
                 final minContentMainSize = {
-                    final childAvailableSpace = AvailableSpaceSizeTools.MIN_CONTENT.withCross(dir, crossAxisAvailableSpace);
+                    final childAvailableSpace = SizeAvail.MIN_CONTENT.withCross(dir, crossAxisAvailableSpace);
 
                     tree.measureChildSize(
                         child.node,
@@ -770,7 +776,7 @@ class FlexboxLayout {
                 child.resolvedMinimumMainSize.maybeMaxF(transferredMinSize.main(constants.dir)),
                 paddingBorderAxesSums.main(constants.dir)
             );
-            final hypotheticalInnerSize = child.flexBasis.maybeClampF(hypotheticalInnerMinMain, transferredMaxSize.main(constants.dir));
+            final hypotheticalInnerSize = child.flexBasis.maybeClampF(OptionalFloat.some(hypotheticalInnerMinMain), transferredMaxSize.main(constants.dir));
             final hypotheticalOuterSize = hypotheticalInnerSize + child.margin.mainAxisSum(constants.dir);
 
             child.hypotheticalInnerSize = child.hypotheticalInnerSize.withMain(constants.dir, hypotheticalInnerSize);
@@ -783,13 +789,13 @@ class FlexboxLayout {
         tree:LayoutFlexboxContainer,
         child:FlexItem,
         constants:AlgoConstants,
-        availableSpace:SizeOf<AvailableSpace>,
+        availableSpace:SizeAvail,
         flexBasisStyle:taffy.style.Dimension,
-        flexBasis:Null<Float>,
-        percentResolutionMainSize:Null<Float>,
+        flexBasis:OptionalFloat,
+        percentResolutionMainSize:OptionalFloat,
         childCrossSizeIsDefinite:Bool,
-        childKnownDimensions:SizeOf<Null<Float>>,
-        childParentSize:SizeOf<Null<Float>>,
+        childKnownDimensions:SizeOpt,
+        childParentSize:SizeOpt,
         crossAxisAvailableSpace:AvailableSpace
     ):Float {
         final dir = constants.dir;
@@ -802,19 +808,20 @@ class FlexboxLayout {
         //    cross size and the flex item's intrinsic aspect ratio.
 
         final mainSize = child.size.main(dir);
-        final mainStretchSize = percentResolutionMainSize.maybeSub(child.margin.mainAxisSum(dir)).maybeMax(0.0);
+        final mainStretchSize = percentResolutionMainSize.maybeSub(OptionalFloat.some(child.margin.mainAxisSum(dir))).maybeMax(OptionalFloat.some(0.0));
 
         // A flex basis that is a sizing keyword (min-content, max-content, fit-content,
         // fit-content(...), stretch) is used in place of the main size property: `stretch`
         // resolves to an exact (definite) size while the other keywords determine the
         // available space constraint the item is measured under. A keyword that cannot be
         // resolved in the current context behaves as `content`.
-        var keywordMainAvailableSpace:Null<AvailableSpace> = null;
+        var hasKeywordMainAvailableSpace = false;
+        var keywordMainAvailableSpace:AvailableSpace = MaxContent;
         if (flexBasisStyle.isContent()) {
             // A flex basis of `content` indicates an automatic size based on the item's
             // content: the item is measured (ignoring its main size property) under the
             // default constraint below
-            keywordMainAvailableSpace = null;
+            hasKeywordMainAvailableSpace = false;
         }
         else if (flexBasisStyle.isSizingKeyword()) {
             final resolution = SizingKeyword.resolveSizingKeyword(flexBasisStyle, mainStretchSize, percentResolutionMainSize);
@@ -824,15 +831,16 @@ class FlexboxLayout {
                         child.flexBasisIsDefinite = true;
                         return size;
                     case Measure(available):
+                        hasKeywordMainAvailableSpace = true;
                         keywordMainAvailableSpace = available;
                 }
             }
         }
         else {
-            final basis = flexBasis != null ? flexBasis : (flexBasisStyle.isAuto() ? mainSize : null);
-            if (basis != null) {
+            final basis:OptionalFloat = flexBasis.isSome() ? flexBasis : (flexBasisStyle.isAuto() ? mainSize : OptionalFloat.NONE);
+            if (basis.isSome()) {
                 child.flexBasisIsDefinite = true;
-                return basis;
+                return basis.unwrap();
             }
 
             // A main size that is a sizing keyword either resolves to an exact size or
@@ -845,6 +853,7 @@ class FlexboxLayout {
                             child.flexBasisIsDefinite = true;
                             return size;
                         case Measure(available):
+                            hasKeywordMainAvailableSpace = true;
                             keywordMainAvailableSpace = available;
                     }
                 }
@@ -874,9 +883,9 @@ class FlexboxLayout {
         if (childCrossSizeIsDefinite) {
             final ratio = child.aspectRatio;
             final cross = childKnownDimensions.cross(dir);
-            if (ratio != null && cross != null) {
+            if (ratio.isSome() && cross.isSome()) {
                 child.flexBasisIsDefinite = true;
-                return dir.isRow() ? (cross : Float) * (ratio : Float) : (cross : Float) / (ratio : Float);
+                return dir.isRow() ? cross.unwrap() * ratio.unwrap() : cross.unwrap() / ratio.unwrap();
             }
         }
 
@@ -887,7 +896,7 @@ class FlexboxLayout {
         //    is auto and not definite, in this calculation use fit-content as the
         //    flex item's cross size. The flex base size is the item's resulting main size.
 
-        final mainAvailable:AvailableSpace = if (keywordMainAvailableSpace != null) {
+        final mainAvailable:AvailableSpace = if (hasKeywordMainAvailableSpace) {
             keywordMainAvailableSpace;
         }
         else {
@@ -897,7 +906,7 @@ class FlexboxLayout {
                 case _: MaxContent;
             }
         };
-        final childAvailableSpace = AvailableSpaceSizeTools.MAX_CONTENT.withMain(dir, mainAvailable).withCross(dir, crossAxisAvailableSpace);
+        final childAvailableSpace = SizeAvail.MAX_CONTENT.withMain(dir, mainAvailable).withCross(dir, crossAxisAvailableSpace);
 
         return tree.measureChildSize(
             child.node,
@@ -929,7 +938,7 @@ class FlexboxLayout {
      *
      *       **Note that the "collect as many" line will collect zero-sized flex items onto the end of the previous line even if the last non-zero item exactly "filled up" the line**.
      */
-    static function collectFlexLines(constants:AlgoConstants, availableSpace:SizeOf<AvailableSpace>, flexItems:Array<FlexItem>):Array<FlexLine> {
+    static function collectFlexLines(constants:AlgoConstants, availableSpace:SizeAvail, flexItems:Array<FlexItem>):Array<FlexLine> {
         // Wrapping into multiple lines requires a definite main size. If the container's known main size
         // is derived from its own content (and is thus indefinite) then all items are collected into a
         // single flex line, matching how the container was sized under a min/max-content constraint.
@@ -950,7 +959,8 @@ class FlexboxLayout {
             case MinContent:
                 return oneItemPerLine(flexItems);
 
-            case Definite(mainAxisAvailable):
+            case definite:
+                final mainAxisAvailable = definite.definiteValue();
                 final lines:Array<FlexLine> = [];
                 final mainAxisGap = constants.gap.main(constants.dir);
                 final total = flexItems.length;
@@ -981,10 +991,10 @@ class FlexboxLayout {
     }
 
     /** The main axis available space that items wrap against (shared by greedy and balanced line collection) */
-    static function wrapMainAxisAvailableSpace(constants:AlgoConstants, availableSpace:SizeOf<AvailableSpace>):AvailableSpace {
+    static function wrapMainAxisAvailableSpace(constants:AlgoConstants, availableSpace:SizeAvail):AvailableSpace {
         final maxMain = constants.maxSize.main(constants.dir);
-        if (maxMain != null) {
-            final maxSize:Float = maxMain;
+        if (maxMain.isSome()) {
+            final maxSize:Float = maxMain.unwrap();
             var available = availableSpace.main(constants.dir).unwrapOr(maxSize);
             // If the container's main size is not definite then it is at most the max main size,
             // so the max size (and not the available space) is the limit that items wrap against.
@@ -1015,7 +1025,7 @@ class FlexboxLayout {
      *
      * See https://drafts.csswg.org/css-flexbox-2/#balance-values
      */
-    static function collectBalancedFlexLines(constants:AlgoConstants, availableSpace:SizeOf<AvailableSpace>, flexItems:Array<FlexItem>):Array<FlexLine> {
+    static function collectBalancedFlexLines(constants:AlgoConstants, availableSpace:SizeAvail, flexItems:Array<FlexItem>):Array<FlexLine> {
         if (flexItems.length == 0) {
             return [];
         }
@@ -1028,7 +1038,7 @@ class FlexboxLayout {
         // If we're sizing under a min-content constraint then we take every possible wrapping
         // opportunity and place each item in its own line, the same as greedy wrapping (the
         // min-content main size of a multi-line container is the size of its largest item)
-        if (mainAxisAvailableSpace.match(MinContent)) {
+        if (mainAxisAvailableSpace == MinContent) {
             return oneItemPerLine(flexItems);
         }
 
@@ -1068,7 +1078,7 @@ class FlexboxLayout {
         final hasCrossAutoMargins = item.marginIsAuto.crossStart(dir) || item.marginIsAuto.crossEnd(dir);
         final crossSize = item.sizeStyle.cross(dir);
         final isStretched = !hasCrossAutoMargins && (crossSize.isStretch() || (item.alignSelf == AlignItems.STRETCH && crossSize.isAuto()));
-        final crossIsDefinite = isStretched || item.size.cross(dir) != null || (!dir.isRow() && constants.crossAxisAvailableSpaceIsDefinite);
+        final crossIsDefinite = isStretched || item.size.cross(dir).isSome() || (!dir.isRow() && constants.crossAxisAvailableSpaceIsDefinite);
 
         return dir.isRow() ? new SizeOf<Bool>(mainIsDefinite, crossIsDefinite) : new SizeOf<Bool>(crossIsDefinite, mainIsDefinite);
     }
@@ -1101,14 +1111,14 @@ class FlexboxLayout {
     /** Determine the container's main size (if not already known) */
     static function determineContainerMainSize(
         tree:LayoutFlexboxContainer,
-        availableSpace:SizeOf<AvailableSpace>,
+        availableSpace:SizeAvail,
         lines:Array<FlexLine>,
         constants:AlgoConstants
     ):Void {
         final mainContentBoxInset = constants.contentBoxInset.mainAxisSum(constants.dir);
 
         final knownOuter = constants.nodeOuterSize.main(constants.dir);
-        var outerMainSize:Float = knownOuter != null ? (knownOuter : Float) : computeOuterMainSize(tree, availableSpace, lines, constants, mainContentBoxInset);
+        var outerMainSize:Float = knownOuter.isSome() ? knownOuter.unwrap() : computeOuterMainSize(tree, availableSpace, lines, constants, mainContentBoxInset);
 
         outerMainSize = Sys.f32Max(
             outerMainSize.maybeClampF(constants.minSize.main(constants.dir), constants.maxSize.main(constants.dir)),
@@ -1118,20 +1128,21 @@ class FlexboxLayout {
         final innerMainSize = Sys.f32Max(outerMainSize - mainContentBoxInset, 0.0);
         constants.containerSize = constants.containerSize.withMain(constants.dir, outerMainSize);
         constants.innerContainerSize = constants.innerContainerSize.withMain(constants.dir, innerMainSize);
-        constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, innerMainSize);
+        constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.some(innerMainSize));
     }
 
     /** The `unwrap_or_else` closure of `determine_container_main_size` */
     static function computeOuterMainSize(
         tree:LayoutFlexboxContainer,
-        availableSpace:SizeOf<AvailableSpace>,
+        availableSpace:SizeAvail,
         lines:Array<FlexLine>,
         constants:AlgoConstants,
         mainContentBoxInset:Float
     ):Float {
         final dir = constants.dir;
         switch availableSpace.main(dir) {
-            case Definite(mainAxisAvailableSpace):
+            case definite if (definite.isDefinite()):
+                final mainAxisAvailableSpace = definite.definiteValue();
                 final mainAxisGap = constants.gap.main(constants.dir);
                 final longest = longestLineLength(lines, constants);
                 final size = longest + mainContentBoxInset;
@@ -1198,8 +1209,8 @@ class FlexboxLayout {
                         // Gentest: padding_border_overrides_size_flex_basis_0.html
                         // Gentest: blockflex_min_content_ignores_own_height_as_percentage_basis.html
                         final clampingBasis:Float = constants.isRow ? item.flexBasis.maybeMaxF(stylePreferred) : item.flexBasis;
-                        final flexBasisMin:Null<Float> = item.flexShrink == 0.0 ? clampingBasis : null;
-                        final flexBasisMax:Null<Float> = item.flexGrow == 0.0 ? clampingBasis : null;
+                        final flexBasisMin:OptionalFloat = item.flexShrink == 0.0 ? OptionalFloat.some(clampingBasis) : OptionalFloat.NONE;
+                        final flexBasisMax:OptionalFloat = item.flexGrow == 0.0 ? OptionalFloat.some(clampingBasis) : OptionalFloat.NONE;
 
                         final minMainSize = Sys.f32Max(
                             styleMin.maybeMax(flexBasisMin).or(flexBasisMin).unwrapOr(item.resolvedMinimumMainSize),
@@ -1208,10 +1219,10 @@ class FlexboxLayout {
                         final maxMainSize = styleMax.maybeMin(flexBasisMax).or(flexBasisMax).unwrapOr(Math.POSITIVE_INFINITY);
 
                         final marginMainSum = item.margin.mainAxisSum(constants.dir);
-                        final contentContribution:Float = if (stylePreferred != null && (maxMainSize <= minMainSize || maxMainSize <= (stylePreferred : Float))) {
+                        final contentContribution:Float = if (stylePreferred.isSome() && (maxMainSize <= minMainSize || maxMainSize <= stylePreferred.unwrap())) {
                             // If the clamping values are such that max <= min, then we can avoid the expensive step of computing the content size
                             // as we know that the clamping values will override it anyway
-                            Sys.f32Max(Sys.f32Min((stylePreferred : Float), maxMainSize), minMainSize) + marginMainSum;
+                            Sys.f32Max(Sys.f32Min(stylePreferred.unwrap(), maxMainSize), minMainSize) + marginMainSum;
                         }
                         else if (maxMainSize <= minMainSize) {
                             minMainSize + marginMainSum;
@@ -1221,13 +1232,13 @@ class FlexboxLayout {
                             // min- or max- content contribution
                             item.flexBasis + marginMainSum;
                         }
-                        else if (stylePreferred != null) {
+                        else if (stylePreferred.isSome()) {
                             // If the item has a definite preferred main size then that is its content
                             // contribution (an inherent-size measure of the item would return it), floored
                             // by the item's main-axis padding+border, so measuring the item can be skipped.
                             // Min/max clamping is applied in the same way as for measured contributions.
                             final itemPbMain = item.padding.mainAxisSum(constants.dir) + item.border.mainAxisSum(constants.dir);
-                            final innerMainSize = Sys.f32Max((stylePreferred : Float), itemPbMain);
+                            final innerMainSize = Sys.f32Max(stylePreferred.unwrap(), itemPbMain);
                             if (constants.isRow) {
                                 (innerMainSize + marginMainSum).maybeClampF(styleMin, styleMax);
                             }
@@ -1301,10 +1312,10 @@ class FlexboxLayout {
     static function measureIntrinsicMainContribution(
         tree:LayoutFlexboxContainer,
         item:FlexItem,
-        availableSpace:SizeOf<AvailableSpace>,
+        availableSpace:SizeAvail,
         constants:AlgoConstants,
-        styleMin:Null<Float>,
-        styleMax:Null<Float>
+        styleMin:OptionalFloat,
+        styleMax:OptionalFloat
     ):Float {
         final dir = constants.dir;
 
@@ -1314,16 +1325,15 @@ class FlexboxLayout {
         // Available space for child sizing (excluding the child's margins)
         final childMinCross = item.minSize.cross(dir);
         final childMaxCross = item.maxSize.cross(dir);
-        final crossAxisAvailableSpace:AvailableSpace = (switch availableSpace.cross(dir) {
-            case Definite(val):
-                Definite(Sys.f32Max(constants.dividedCrossSpace(crossAxisParentSize.unwrapOr(val)) - item.margin.crossAxisSum(dir), 0.0));
-            case other: other;
-        }).maybeClamp(childMinCross, childMaxCross);
+        final crossSpace = availableSpace.cross(dir);
+        final crossAxisAvailableSpace:AvailableSpace = (crossSpace.isDefinite()
+            ? Definite(Sys.f32Max(constants.dividedCrossSpace(crossAxisParentSize.unwrapOr(crossSpace.definiteValue())) - item.margin.crossAxisSum(dir), 0.0))
+            : crossSpace).maybeClamp(childMinCross, childMaxCross);
 
         final childAvailableSpace = availableSpace.withCross(dir, crossAxisAvailableSpace);
 
         // Known dimensions for child sizing
-        var childKnownDimensions = item.size.withMain(dir, null);
+        var childKnownDimensions = item.size.withMain(dir, OptionalFloat.NONE);
         // Clamp the definite cross size by the cross min/max sizes, as
         // `determine_flex_base_size` does: an item measured wider than its
         // max-width wraps onto fewer lines and under-reports its height.
@@ -1333,7 +1343,7 @@ class FlexboxLayout {
             dir,
             childKnownDimensions.cross(dir).maybeClamp(transferredMinSize.cross(dir), transferredMaxSize.cross(dir))
         );
-        if (item.alignSelf == AlignItems.STRETCH && childKnownDimensions.cross(dir) == null) {
+        if (item.alignSelf == AlignItems.STRETCH && childKnownDimensions.cross(dir).isNone()) {
             childKnownDimensions = childKnownDimensions.withCross(dir, crossAxisAvailableSpace.intoOption());
         }
 
@@ -1353,9 +1363,9 @@ class FlexboxLayout {
         // and floors the measured content size
         final ratio = item.aspectRatio;
         final knownCross = childKnownDimensions.cross(dir);
-        final transferredMainSize:Null<Float> = (ratio != null && knownCross != null)
-            ? (constants.isRow ? (knownCross : Float) * (ratio : Float) : (knownCross : Float) / (ratio : Float))
-            : null;
+        final transferredMainSize:OptionalFloat = (ratio.isSome() && knownCross.isSome())
+            ? (constants.isRow ? OptionalFloat.some(knownCross.unwrap() * ratio.unwrap()) : OptionalFloat.some(knownCross.unwrap() / ratio.unwrap()))
+            : OptionalFloat.NONE;
 
         final innerMainSize = measuredMainSize.maybeMaxF(transferredMainSize);
 
@@ -1453,7 +1463,7 @@ class FlexboxLayout {
         //    use their outer target main size; for other items, use their outer flex base size.
 
         final initialUsedSpace = lineUsedSpace(line, constants, totalMainAxisGap);
-        final initialFreeSpace = nodeInnerMain.maybeSub(initialUsedSpace).unwrapOr(0.0);
+        final initialFreeSpace = nodeInnerMain.maybeSub(OptionalFloat.some(initialUsedSpace)).unwrapOr(0.0);
 
         // 4. Loop
 
@@ -1493,13 +1503,13 @@ class FlexboxLayout {
             }
 
             final freeSpace:Float = if (growing && sumFlexGrow < 1.0) {
-                (initialFreeSpace * sumFlexGrow - totalMainAxisGap).maybeMinF(nodeInnerMain.maybeSub(usedSpace));
+                (initialFreeSpace * sumFlexGrow - totalMainAxisGap).maybeMinF(nodeInnerMain.maybeSub(OptionalFloat.some(usedSpace)));
             }
             else if (shrinking && sumFlexShrink < 1.0) {
-                (initialFreeSpace * sumFlexShrink - totalMainAxisGap).maybeMaxF(nodeInnerMain.maybeSub(usedSpace));
+                (initialFreeSpace * sumFlexShrink - totalMainAxisGap).maybeMaxF(nodeInnerMain.maybeSub(OptionalFloat.some(usedSpace)));
             }
             else {
-                nodeInnerMain.maybeSub(usedSpace).unwrapOr(usedFlexFactor - usedSpace);
+                nodeInnerMain.maybeSub(OptionalFloat.some(usedSpace)).unwrapOr(usedFlexFactor - usedSpace);
             };
 
             // c. Distribute free space proportional to the flex factors.
@@ -1548,7 +1558,7 @@ class FlexboxLayout {
 
             var totalViolation = 0.0;
             for (child in unfrozen) {
-                final resolvedMinMain:Null<Float> = child.resolvedMinimumMainSize;
+                final resolvedMinMain:OptionalFloat = OptionalFloat.some(child.resolvedMinimumMainSize);
                 final maxMain = child.maxSize.main(dir);
                 final clamped = Sys.f32Max(child.targetSize.main(dir).maybeClampF(resolvedMinMain, maxMain), 0.0);
                 child.violation = clamped - child.targetSize.main(dir);
@@ -1595,7 +1605,7 @@ class FlexboxLayout {
         tree:LayoutFlexboxContainer,
         line:FlexLine,
         constants:AlgoConstants,
-        availableSpace:SizeOf<AvailableSpace>
+        availableSpace:SizeAvail
     ):Void {
         final dir = constants.dir;
         for (child in line.items) {
@@ -1609,21 +1619,21 @@ class FlexboxLayout {
             final transferredMinCross = child.minSize.maybeApplyAspectRatio(child.aspectRatio).cross(dir);
             final transferredMaxCross = child.maxSize.maybeApplyAspectRatio(child.aspectRatio).cross(dir);
 
-            final childCross = child.size.cross(dir).maybeClamp(transferredMinCross, transferredMaxCross).maybeMax(paddingBorderSum);
+            final childCross = child.size.cross(dir).maybeClamp(transferredMinCross, transferredMaxCross).maybeMax(OptionalFloat.some(paddingBorderSum));
 
-            var childAvailableCross:AvailableSpace = (switch availableSpace.cross(dir) {
-                case Definite(val): Definite(Sys.f32Max(constants.dividedCrossSpace(val) - child.margin.crossAxisSum(dir), 0.0));
-                case other: other;
-            }).maybeClamp(transferredMinCross, transferredMaxCross).maybeMax(paddingBorderSum);
+            final crossSpace = availableSpace.cross(dir);
+            var childAvailableCross:AvailableSpace = (crossSpace.isDefinite()
+                ? Definite(Sys.f32Max(constants.dividedCrossSpace(crossSpace.definiteValue()) - child.margin.crossAxisSum(dir), 0.0))
+                : crossSpace).maybeClamp(transferredMinCross, transferredMaxCross).maybeMax(OptionalFloat.some(paddingBorderSum));
 
             // A cross size that is a sizing keyword (min-content, max-content, fit-content,
             // fit-content(...)) determines the available space constraint the item is measured under.
             // The `stretch` keyword is not resolved here: it stretches to the flex line, which is
             // handled in `determineUsedCrossSize`
             final nodeInnerCross = constants.nodeInnerSize.cross(dir);
-            final crossStretchSize:Null<Float> = nodeInnerCross != null
-                ? Sys.f32Max(constants.dividedCrossSpace(nodeInnerCross) - child.margin.crossAxisSum(dir), 0.0)
-                : null;
+            final crossStretchSize:OptionalFloat = nodeInnerCross.isSome()
+                ? OptionalFloat.some(Sys.f32Max(constants.dividedCrossSpace(nodeInnerCross.unwrap()) - child.margin.crossAxisSum(dir), 0.0))
+                : OptionalFloat.NONE;
             final resolution = SizingKeyword.resolveSizingKeyword(child.sizeStyle.cross(dir), crossStretchSize, nodeInnerCross);
             if (resolution != null) {
                 switch resolution {
@@ -1633,21 +1643,21 @@ class FlexboxLayout {
                 }
             }
 
-            final childInnerCross:Float = if (childCross != null) {
-                (childCross : Float);
+            final childInnerCross:Float = if (childCross.isSome()) {
+                childCross.unwrap();
             }
             else {
                 final output = tree.computeChildLayout(child.node, new LayoutInput(
                     RunMode.ComputeSize,
                     SizingMode.ContentSize,
                     RequestedAxis.fromAbsoluteAxis(dir.crossAxis()),
-                    new SizeOf<Null<Float>>(
-                        constants.isRow ? child.targetSize.width : childCross,
-                        constants.isRow ? childCross : child.targetSize.height
+                    new SizeOpt(
+                        constants.isRow ? OptionalFloat.some(child.targetSize.width) : childCross,
+                        constants.isRow ? childCross : OptionalFloat.some(child.targetSize.height)
                     ),
                     itemKnownDimensionDefiniteness(constants, child),
                     constants.nodeInnerSize,
-                    new SizeOf<AvailableSpace>(
+                    new SizeAvail(
                         constants.isRow ? childAvailableMain : childAvailableCross,
                         constants.isRow ? childAvailableCross : childAvailableMain
                     ),
@@ -1665,8 +1675,8 @@ class FlexboxLayout {
     /** Calculate the base lines of the children. */
     static function calculateChildrenBaseLines(
         tree:LayoutFlexboxContainer,
-        nodeSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>,
+        nodeSize:SizeOpt,
+        availableSpace:SizeAvail,
         flexLines:Array<FlexLine>,
         constants:AlgoConstants
     ):Void {
@@ -1698,14 +1708,14 @@ class FlexboxLayout {
                     RunMode.PerformLayout,
                     SizingMode.ContentSize,
                     RequestedAxis.Both,
-                    new SizeOf<Null<Float>>(
-                        constants.isRow ? child.targetSize.width : child.hypotheticalInnerSize.width,
-                        constants.isRow ? child.hypotheticalInnerSize.height : child.targetSize.height
+                    new SizeOpt(
+                        constants.isRow ? OptionalFloat.some(child.targetSize.width) : OptionalFloat.some(child.hypotheticalInnerSize.width),
+                        constants.isRow ? OptionalFloat.some(child.hypotheticalInnerSize.height) : OptionalFloat.some(child.targetSize.height)
                     ),
                     itemKnownDimensionDefiniteness(constants, child),
                     constants.nodeInnerSize,
                     // The available space passed to the child excludes the child's margins
-                    new SizeOf<AvailableSpace>(
+                    new SizeAvail(
                         constants.isRow ? Definite(constants.containerSize.width) : availableSpace.width.maybeSet(nodeSize.width),
                         constants.isRow ? availableSpace.height.maybeSet(nodeSize.height) : Definite(constants.containerSize.height)
                     ).maybeSubSize(child.margin.sumAxes()).maybeMaxSize(Size.ZERO),
@@ -1737,18 +1747,18 @@ class FlexboxLayout {
      *
      * - [**Calculate the cross size of each flex line**](https://www.w3.org/TR/css-flexbox-1/#algo-cross-line).
      */
-    static function calculateCrossSize(flexLines:Array<FlexLine>, nodeSize:SizeOf<Null<Float>>, constants:AlgoConstants):Void {
+    static function calculateCrossSize(flexLines:Array<FlexLine>, nodeSize:SizeOpt, constants:AlgoConstants):Void {
         final dir = constants.dir;
         // If the flex container is single-line and has a definite cross size,
         // the cross size of the flex line is the flex container's inner cross size.
-        if (!constants.isWrap && nodeSize.cross(dir) != null) {
+        if (!constants.isWrap && nodeSize.cross(dir).isSome()) {
             final crossAxisPaddingBorder = constants.contentBoxInset.crossAxisSum(dir);
             final crossMinSize = constants.minSize.cross(dir);
             final crossMaxSize = constants.maxSize.cross(dir);
             flexLines[0].crossSize = nodeSize.cross(dir)
                 .maybeClamp(crossMinSize, crossMaxSize)
-                .maybeSub(crossAxisPaddingBorder)
-                .maybeMax(0.0)
+                .maybeSub(OptionalFloat.some(crossAxisPaddingBorder))
+                .maybeMax(OptionalFloat.some(0.0))
                 .unwrapOr(0.0);
         }
         else {
@@ -1789,8 +1799,8 @@ class FlexboxLayout {
                 final crossMinSize = constants.minSize.cross(dir);
                 final crossMaxSize = constants.maxSize.cross(dir);
                 flexLines[0].crossSize = flexLines[0].crossSize.maybeClampF(
-                    crossMinSize.maybeSub(crossAxisPaddingBorder),
-                    crossMaxSize.maybeSub(crossAxisPaddingBorder)
+                    crossMinSize.maybeSub(OptionalFloat.some(crossAxisPaddingBorder)),
+                    crossMaxSize.maybeSub(OptionalFloat.some(crossAxisPaddingBorder))
                 );
             }
         }
@@ -1805,7 +1815,7 @@ class FlexboxLayout {
      *   and the sum of the flex lines' cross sizes is less than the flex container's inner cross size,
      *   increase the cross size of each flex line by equal amounts such that the sum of their cross sizes exactly equals the flex container's inner cross size.
      */
-    static function handleAlignContentStretch(flexLines:Array<FlexLine>, nodeSize:SizeOf<Null<Float>>, constants:AlgoConstants):Void {
+    static function handleAlignContentStretch(flexLines:Array<FlexLine>, nodeSize:SizeOpt, constants:AlgoConstants):Void {
         final dir = constants.dir;
         if (constants.alignContent == AlignContent.STRETCH) {
             final crossAxisPaddingBorder = constants.contentBoxInset.crossAxisSum(dir);
@@ -1814,8 +1824,8 @@ class FlexboxLayout {
             final containerMinInnerCross = nodeSize.cross(dir)
                 .or(crossMinSize)
                 .maybeClamp(crossMinSize, crossMaxSize)
-                .maybeSub(crossAxisPaddingBorder)
-                .maybeMax(0.0)
+                .maybeSub(OptionalFloat.some(crossAxisPaddingBorder))
+                .maybeMax(OptionalFloat.some(0.0))
                 .unwrapOr(0.0);
 
             final totalCrossAxisGap = sumAxisGaps(constants.gap.cross(dir), flexLines.length);
@@ -2097,7 +2107,7 @@ class FlexboxLayout {
      *
      *     - Otherwise, use the sum of the flex lines' cross sizes, clamped by the used min and max cross sizes of the flex container.
      */
-    static function determineContainerCrossSize(flexLines:Array<FlexLine>, nodeSize:SizeOf<Null<Float>>, constants:AlgoConstants):Float {
+    static function determineContainerCrossSize(flexLines:Array<FlexLine>, nodeSize:SizeOpt, constants:AlgoConstants):Float {
         final dir = constants.dir;
         final totalCrossAxisGap = sumAxisGaps(constants.gap.cross(dir), flexLines.length);
         var totalLineCrossSize = 0.0;
@@ -2175,7 +2185,7 @@ class FlexboxLayout {
             definiteness,
             nodeInnerSize,
             // The available space passed to the child excludes the child's margins
-            new SizeOf<AvailableSpace>(
+            new SizeAvail(
                 Definite(Sys.f32Max(containerSize.width - marginSum.width, 0.0)),
                 Definite(Sys.f32Max(containerSize.height - marginSum.height, 0.0))
             ),

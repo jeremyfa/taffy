@@ -49,6 +49,9 @@ class HandWrittenTests {
             for (test in module.tests) {
                 total++;
                 final name = module.name + "." + test.name;
+                #if taffy_census
+                final censusBefore = taffy.util.Census.optNaN + taffy.util.Census.optPosInf + taffy.util.Census.optNegInf;
+                #end
                 try {
                     test.fn();
                     passed++;
@@ -59,6 +62,11 @@ class HandWrittenTests {
                 catch (e:Dynamic) {
                     failures.push(name + " (" + Std.string(e) + ")");
                 }
+                #if taffy_census
+                final censusAfter = taffy.util.Census.optNaN + taffy.util.Census.optPosInf + taffy.util.Census.optNegInf;
+                if (censusAfter != censusBefore)
+                    FileIO.println('  census: ' + (censusAfter - censusBefore) + ' NaN/inf optional values in ' + name);
+                #end
             }
         }
         return {passed: passed, total: total, failures: failures};

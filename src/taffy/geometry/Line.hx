@@ -22,6 +22,10 @@ class Line {
     public final end:Float;
 
     public inline function new(start:Float, end:Float) {
+        #if taffy_census
+        taffy.util.Census.conc(start);
+        taffy.util.Census.conc(end);
+        #end
         this.start = start;
         this.end = end;
     }

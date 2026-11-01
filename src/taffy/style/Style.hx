@@ -10,6 +10,7 @@ import taffy.geometry.LineOf;
 import taffy.geometry.PointOf;
 import taffy.geometry.RectOf;
 import taffy.geometry.SizeOf;
+import taffy.util.OptionalFloat;
 
 /**
  * A typed representation of the CSS style information for a single node.
@@ -76,7 +77,7 @@ class Style {
     public var maxSize:SizeOf<LengthPercentageAuto> = DEFAULT_MIN_MAX_SIZE;
 
     /** Sets the preferred aspect ratio for the item (width / height) */
-    public var aspectRatio:Null<Float> = null;
+    public var aspectRatio:OptionalFloat = OptionalFloat.NONE;
 
     /** How large should the margin be on each side? */
     public var margin:RectOf<LengthPercentageAuto> = DEFAULT_MARGIN;

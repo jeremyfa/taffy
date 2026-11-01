@@ -210,8 +210,8 @@ class MeasureTests {
 
     static function customMeasureFunction(inputs:LayoutInput, nodeId:NodeId, nodeContext:Null<Int>, style:Style):LayoutOutput {
         return Leaf.computeLeafLayout(inputs, style, (knownDimensions, availableSpace) -> {
-            final height:Float = knownDimensions.height != null ? knownDimensions.height : 50.0;
-            final width:Float = knownDimensions.width != null ? knownDimensions.width : height;
+            final height:Float = knownDimensions.height.isSome() ? knownDimensions.height.unwrap() : 50.0;
+            final width:Float = knownDimensions.width.isSome() ? knownDimensions.width.unwrap() : height;
             return new Size(width, height);
         });
     }

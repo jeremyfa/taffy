@@ -13,6 +13,8 @@ import taffy.style.Dimension;
 import taffy.style.Style;
 import taffy.tree.NodeId;
 import taffy.tree.TaffyTree;
+import taffy.style.AvailableSpace.Definite;
+import taffy.geometry.SizeAvail;
 
 /**
  * Percentage track sizing functions resolve against the grid container's size. When that size is
@@ -39,7 +41,7 @@ class GridPercentageRerunTests {
             s.gridTemplateColumns = tracks("fit-content(50%)");
             s.gridTemplateRows = tracks("40px");
         }), [item]);
-        tree.computeLayoutWithMeasure(root, new SizeOf<AvailableSpace>(availableWidth, MaxContent), testMeasureFunction);
+        tree.computeLayoutWithMeasure(root, new SizeAvail(availableWidth, MaxContent), testMeasureFunction);
         return [tree.layout(root).size.width, tree.layout(item).size.width];
     }
 
@@ -72,7 +74,7 @@ class GridPercentageRerunTests {
             s.gridTemplateColumns = tracks("auto");
             s.gridTemplateRows = tracks("auto 20% auto");
         }), [a, b, c]);
-        tree.computeLayout(root, new SizeOf<AvailableSpace>(Definite(200.0), availableHeight));
+        tree.computeLayout(root, new SizeAvail(Definite(200.0), availableHeight));
         final total = tree.layout(root).size.height;
         final y = (node:NodeId) -> tree.layout(node).location.y;
         return [total, y(b), y(c) - y(b), total - y(c)];

@@ -8,6 +8,7 @@ import taffy.style.AvailableSpace;
 import taffy.style.Clear;
 import taffy.style.FloatDirection;
 import taffy.util.Sys;
+import taffy.style.AvailableSpace.Definite;
 
 /**
  * Context for computing the intrinsic width contribution of a set of floats
@@ -38,7 +39,10 @@ class FloatIntrinsicWidthCalculator {
         switch availableWidth {
             // Definite available width means the container is being fit-content sized.
             // The floats' max-content contribution (widths summed) is clamped by the available width in `result`.
-            case Definite(_) | MaxContent:
+            case MinContent:
+                contribution = Sys.f32Max(contribution, width);
+            case _:
+                // Definite or max-content
                 // A float that clears a side is placed below the floats on that side, so its
                 // width does not accumulate with theirs.
                 if (clear == Clear.Left || clear == Clear.Both)
@@ -50,20 +54,15 @@ class FloatIntrinsicWidthCalculator {
                 else
                     sideSumRight += width;
                 contribution = Sys.f32Max(contribution, sideSumLeft + sideSumRight);
-            case MinContent:
-                contribution = Sys.f32Max(contribution, width);
         }
         widest = Sys.f32Max(widest, width);
     }
 
     /** Get the computed float contribution to intrinsic width */
     public function result():Float {
-        return switch availableWidth {
-            // Fit-content sizing: clamp the max-content contribution between the available
-            // width and the min-content contribution.
-            case Definite(available): Sys.f32Max(Sys.f32Min(contribution, available), widest);
-            case _: contribution;
-        }
+        // Fit-content sizing: clamp the max-content contribution between the available
+        // width and the min-content contribution.
+        return availableWidth.isDefinite() ? Sys.f32Max(Sys.f32Min(contribution, availableWidth.definiteValue()), widest) : contribution;
     }
 
 }

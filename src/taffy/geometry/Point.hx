@@ -24,6 +24,10 @@ class Point {
     public final y:Float;
 
     public inline function new(x:Float, y:Float) {
+        #if taffy_census
+        taffy.util.Census.conc(x);
+        taffy.util.Census.conc(y);
+        #end
         this.x = x;
         this.y = y;
     }

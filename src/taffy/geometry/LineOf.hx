@@ -19,6 +19,10 @@ class LineOf<T> {
     public final end:T;
 
     public inline function new(start:T, end:T) {
+        #if taffy_census
+        taffy.util.Census.any(start, 'LineOf.new');
+        taffy.util.Census.any(end, 'LineOf.new');
+        #end
         this.start = start;
         this.end = end;
     }

@@ -16,6 +16,7 @@ import taffy.style.Direction;
 import taffy.style.GridAreaAxis;
 import taffy.style.GridPlacement;
 import taffy.util.Sys;
+import taffy.util.OptionalFloat;
 
 /**
  * Information from the computation of grid
@@ -130,7 +131,7 @@ class DetailedGridTracksInfo {
      * when the axis has no tracks (an empty grid still contains one grid line in each axis,
      * positioned by content alignment). Null when the axis has tracks.
      */
-    public final emptyAxisLine:Null<Float>;
+    public final emptyAxisLine:OptionalFloat;
 
     /**
      * The names of each *explicit* grid line. Stored line `i` (0-indexed) bounds the start of
@@ -140,7 +141,7 @@ class DetailedGridTracksInfo {
     public final lineNames:GridLineNames;
 
     public function new(negativeImplicitTracks:Int, explicitTracks:Int, positiveImplicitTracks:Int, positions:Array<Line>,
-            collapsedTracks:Array<Int>, emptyAxisLine:Null<Float>, lineNames:GridLineNames) {
+            collapsedTracks:Array<Int>, emptyAxisLine:OptionalFloat, lineNames:GridLineNames) {
         this.negativeImplicitTracks = negativeImplicitTracks;
         this.explicitTracks = explicitTracks;
         this.positiveImplicitTracks = positiveImplicitTracks;
@@ -173,7 +174,7 @@ class DetailedGridTracksInfo {
         }
         // An axis with no tracks consists of a single gutter whose offset is where the axis'
         // single grid line was positioned by content alignment
-        final emptyAxisLine:Null<Float> = (positions.length == 0 && gridTracks.length > 0) ? gridTracks[0].offset : null;
+        final emptyAxisLine:OptionalFloat = (positions.length == 0 && gridTracks.length > 0) ? OptionalFloat.some(gridTracks[0].offset) : OptionalFloat.NONE;
         return new DetailedGridTracksInfo(trackCount.negativeImplicit, trackCount.explicit, trackCount.positiveImplicit, positions, collapsedTracks,
             emptyAxisLine, lineNames);
     }
@@ -225,8 +226,8 @@ class DetailedGridTracksInfo {
                 startPosition = absoluteTrackEdge(line, true, isReversed);
             else if (positions.length > 0)
                 startPosition = isReversed ? positions[positions.length - 1].start : positions[positions.length - 1].end;
-            else if (emptyAxisLine != null)
-                startPosition = emptyAxisLine;
+            else if (emptyAxisLine.isSome())
+                startPosition = emptyAxisLine.unwrap();
         }
         var endPosition = isReversed ? paddingStart : paddingEnd;
         if (endLine != null) {
@@ -235,8 +236,8 @@ class DetailedGridTracksInfo {
                 endPosition = absoluteTrackEdge(line - 1, false, isReversed);
             else if (positions.length > 0)
                 endPosition = isReversed ? positions[0].end : positions[0].start;
-            else if (emptyAxisLine != null)
-                endPosition = emptyAxisLine;
+            else if (emptyAxisLine.isSome())
+                endPosition = emptyAxisLine.unwrap();
         }
 
         // An area whose lines all fall within a collapsed run is zero-sized and anchored at its

@@ -8,6 +8,7 @@ import taffy.style.LengthPercentage;
 import taffy.style.MaxTrackSizingFunction;
 import taffy.style.MinTrackSizingFunction;
 import taffy.util.Sys;
+import taffy.util.OptionalFloat;
 
 /**
  * Whether a GridTrack represents an actual track or a gutter.
@@ -128,9 +129,9 @@ class GridTrack {
      * container's inner size in this axis. Percentage limits resolve to infinity if that size is
      * indefinite, as do tracks which are not `fit-content()`.
      */
-    public inline function resolveFitContentLimit(axisInnerNodeSize:Null<Float>):Void {
+    public inline function resolveFitContentLimit(axisInnerNodeSize:OptionalFloat):Void {
         final limit = maxTrackSizingFunction.fitContentLimit(axisInnerNodeSize);
-        fitContentLimitValue = limit != null ? (limit : Float) : Math.POSITIVE_INFINITY;
+        fitContentLimitValue = limit.isSome() ? limit.unwrap() : Math.POSITIVE_INFINITY;
     }
 
     /** Returns the resolved `fit-content()` limit of the track (infinity if the track is not `fit-content()`) */

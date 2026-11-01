@@ -5,6 +5,7 @@
 package taffy.geometry;
 
 import taffy.style.FlexDirection;
+import taffy.util.OptionalFloat;
 import taffy.util.Sys;
 import taffy.util.MaybeMath;
 
@@ -26,6 +27,10 @@ class Size {
     public final height:Float;
 
     public inline function new(width:Float, height:Float) {
+        #if taffy_census
+        taffy.util.Census.conc(width);
+        taffy.util.Census.conc(height);
+        #end
         this.width = width;
         this.height = height;
     }
@@ -105,33 +110,33 @@ class Size {
         return width > 0.0 && height > 0.0;
     }
 
-    /** Convert to a `SizeOf<Null<Float>>` with both axes set (Rust: `size.map(Some)`) */
-    public inline function toOptions():SizeOf<Null<Float>> {
-        return new SizeOf<Null<Float>>(width, height);
+    /** Convert to a `SizeOpt` with both axes set (Rust: `size.map(Some)`) */
+    public inline function toOptions():SizeOpt {
+        return new SizeOpt(OptionalFloat.some(width), OptionalFloat.some(height));
     }
 
     /** `MaybeMath::maybe_min` with an optional rhs */
-    public inline function maybeMin(rhs:SizeOf<Null<Float>>):Size {
+    public inline function maybeMin(rhs:SizeOpt):Size {
         return new Size(MaybeMath.maybeMinF(width, rhs.width), MaybeMath.maybeMinF(height, rhs.height));
     }
 
     /** `MaybeMath::maybe_max` with an optional rhs */
-    public inline function maybeMax(rhs:SizeOf<Null<Float>>):Size {
+    public inline function maybeMax(rhs:SizeOpt):Size {
         return new Size(MaybeMath.maybeMaxF(width, rhs.width), MaybeMath.maybeMaxF(height, rhs.height));
     }
 
     /** `MaybeMath::maybe_clamp` with optional bounds */
-    public inline function maybeClamp(min:SizeOf<Null<Float>>, max:SizeOf<Null<Float>>):Size {
+    public inline function maybeClamp(min:SizeOpt, max:SizeOpt):Size {
         return new Size(MaybeMath.maybeClampF(width, min.width, max.width), MaybeMath.maybeClampF(height, min.height, max.height));
     }
 
     /** `MaybeMath::maybe_add` with an optional rhs */
-    public inline function maybeAdd(rhs:SizeOf<Null<Float>>):Size {
+    public inline function maybeAdd(rhs:SizeOpt):Size {
         return new Size(MaybeMath.maybeAddF(width, rhs.width), MaybeMath.maybeAddF(height, rhs.height));
     }
 
     /** `MaybeMath::maybe_sub` with an optional rhs */
-    public inline function maybeSub(rhs:SizeOf<Null<Float>>):Size {
+    public inline function maybeSub(rhs:SizeOpt):Size {
         return new Size(MaybeMath.maybeSubF(width, rhs.width), MaybeMath.maybeSubF(height, rhs.height));
     }
 

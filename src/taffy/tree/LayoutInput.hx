@@ -7,6 +7,8 @@ package taffy.tree;
 import taffy.geometry.LineOf;
 import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.SizeAvail;
 
 /**
  * A struct containing the inputs constraints/hints for laying out a node, which are passed in by the parent.
@@ -21,10 +23,10 @@ class LayoutInput {
         PerformHiddenLayout,
         InherentSize,
         Both,
-        new SizeOf<Null<Float>>(null, null),
+        SizeOpt.NONE,
         new SizeOf<Bool>(true, true),
-        new SizeOf<Null<Float>>(null, null),
-        new SizeOf<AvailableSpace>(MaxContent, MaxContent),
+        SizeOpt.NONE,
+        new SizeAvail(MaxContent, MaxContent),
         new LineOf<Bool>(false, false)
     );
 
@@ -41,7 +43,7 @@ class LayoutInput {
      * Known dimensions represent dimensions (width/height) which should be taken as fixed when performing layout.
      * Layout functions will be called with both known dimensions set for final layout.
      */
-    public final knownDimensions:SizeOf<Null<Float>>;
+    public final knownDimensions:SizeOpt;
 
     /**
      * Whether each known dimension should be treated as a *definite* size when laying out the node's
@@ -50,13 +52,13 @@ class LayoutInput {
     public final knownDimensionsAreDefinite:SizeOf<Bool>;
 
     /** Parent size dimensions are intended to be used for percentage resolution. */
-    public final parentSize:SizeOf<Null<Float>>;
+    public final parentSize:SizeOpt;
 
     /**
      * Available space represents an amount of space to layout into, and is used as a soft constraint
      * for the purpose of wrapping. A definite available space is the space available to the node's border box.
      */
-    public final availableSpace:SizeOf<AvailableSpace>;
+    public final availableSpace:SizeAvail;
 
     /** Specific to CSS Block layout. Used for correctly computing margin collapsing. */
     public final verticalMarginsAreCollapsible:LineOf<Bool>;
@@ -65,10 +67,10 @@ class LayoutInput {
         runMode:RunMode,
         sizingMode:SizingMode,
         axis:RequestedAxis,
-        knownDimensions:SizeOf<Null<Float>>,
+        knownDimensions:SizeOpt,
         knownDimensionsAreDefinite:SizeOf<Bool>,
-        parentSize:SizeOf<Null<Float>>,
-        availableSpace:SizeOf<AvailableSpace>,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ) {
         this.runMode = runMode;
@@ -104,12 +106,12 @@ class LayoutInput {
     }
 
     /** Return a copy with different known dimensions */
-    public inline function withKnownDimensions(knownDimensions:SizeOf<Null<Float>>):LayoutInput {
+    public inline function withKnownDimensions(knownDimensions:SizeOpt):LayoutInput {
         return new LayoutInput(runMode, sizingMode, axis, knownDimensions, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
     }
 
     /** Return a copy with a different available space */
-    public inline function withAvailableSpace(availableSpace:SizeOf<AvailableSpace>):LayoutInput {
+    public inline function withAvailableSpace(availableSpace:SizeAvail):LayoutInput {
         return new LayoutInput(runMode, sizingMode, axis, knownDimensions, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
     }
 

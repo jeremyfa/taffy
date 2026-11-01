@@ -3,7 +3,7 @@ package;
 /**
  * Test runner: runs the hand written tests and the XML fixtures.
  *
- * Usage: `node bin/test.js [fixturesDir] [--category <name>] [--filter <substring>] [--verbose] [--failures <file>] [--no-unit]`
+ * Usage: `node bin/test.js [fixturesDir] [--category <name>] [--filter <substring>] [--verbose] [--failures <file>] [--no-unit] [--dump <file>]`
  *
  * The fixtures directory defaults to the `TAFFY_FIXTURES` environment variable, then to `fixtures`
  * (the small subset copied in this repository). It must contain one folder per category
@@ -19,6 +19,7 @@ class Main {
         var verbose = false;
         var failuresFile:Null<String> = null;
         var runUnit = true;
+        var dumpFile:Null<String> = null;
         var i = 0;
         while (i < args.length) {
             final arg = args[i];
@@ -33,6 +34,9 @@ class Main {
                     failuresFile = args[++i];
                 case "--no-unit":
                     runUnit = false;
+                case "--dump":
+                    dumpFile = args[++i];
+                    XmlTests.dump = new StringBuf();
                 case _:
                     fixturesDir = arg;
             }
@@ -49,7 +53,9 @@ class Main {
             final suites = [
                 {name: "hand written tests", run: HandWrittenTests.run},
                 {name: "flexbox unit tests", run: FlexboxUnitTests.run},
-                {name: "grid unit tests", run: GridUnitTests.run}
+                {name: "grid unit tests", run: GridUnitTests.run},
+                {name: "optional float tests", run: OptionalFloatTests.run},
+                {name: "f32 literal tests", run: F32LiteralTests.run}
             ];
             for (suite in suites) {
                 final unit = suite.run();
@@ -81,6 +87,8 @@ class Main {
                 count++;
                 var ok = false;
                 var details = "";
+                if (XmlTests.dump != null)
+                    XmlTests.dump.add(cat + "/" + name + "\n");
                 try {
                     final result = XmlTests.runXmlTest(FileIO.readFile(dir + "/" + file));
                     ok = result.passed;
@@ -109,10 +117,15 @@ class Main {
                 FileIO.println('$cat: $passed / $count passed');
         }
         FileIO.println('total: $totalPassed / $totalCount passed');
+        if (dumpFile != null)
+            FileIO.writeFile(dumpFile, XmlTests.dump.toString());
         if (failuresFile != null)
             FileIO.writeFile(failuresFile, failures.join("\n") + "\n");
         if (totalPassed != totalCount)
             allOk = false;
+        #if (taffy_census && !js)
+        FileIO.println(taffy.util.Census.report());
+        #end
         FileIO.exit(allOk ? 0 : 1);
     }
 

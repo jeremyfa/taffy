@@ -49,6 +49,9 @@ import taffy.tree.OofCandidates;
 import taffy.tree.OofPositioningArea;
 import taffy.util.MaybeMath;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
 
 using taffy.geometry.SizeOf;
 using taffy.util.Resolve;
@@ -97,7 +100,7 @@ class GridLayout {
             style.size.maybeResolve(parentSize).maybeApplyAspectRatio(style.aspectRatio).maybeAddSize(boxSizingAdjustment);
         }
         else {
-            OptionSizeTools.NONE;
+            SizeOpt.NONE;
         }
 
         // Scrollbar gutters are reserved when the `overflow` property is set to `Overflow::Scroll`.
@@ -125,7 +128,7 @@ class GridLayout {
             .maybeClamp(minSize, maxSize)
             .maybeMaxSize(paddingBorderSize);
 
-        final availableGridSpace = new SizeOf<AvailableSpace>(
+        final availableGridSpace = new SizeAvail(
             AvailableSpaceTools.mapDefiniteValue(constrainedAvailableSpace.width, space -> space - contentBoxInset.horizontalAxisSum()),
             AvailableSpaceTools.mapDefiniteValue(constrainedAvailableSpace.height, space -> space - contentBoxInset.verticalAxisSum())
         );
@@ -136,20 +139,20 @@ class GridLayout {
         // (which are border-box sizes) need converting to content-box sizes before being passed to it
         final innerMinSize = minSize.maybeSubSize(contentBoxInset.sumAxes());
         final innerMaxSize = maxSize.maybeSubSize(contentBoxInset.sumAxes());
-        var innerNodeSize = new SizeOf<Null<Float>>(
-            outerNodeSize.width != null ? (outerNodeSize.width : Float) - contentBoxInset.horizontalAxisSum() : null,
-            outerNodeSize.height != null ? (outerNodeSize.height : Float) - contentBoxInset.verticalAxisSum() : null
+        var innerNodeSize = new SizeOpt(
+            outerNodeSize.width.isSome() ? OptionalFloat.some(outerNodeSize.width.unwrap() - contentBoxInset.horizontalAxisSum()) : OptionalFloat.NONE,
+            outerNodeSize.height.isSome() ? OptionalFloat.some(outerNodeSize.height.unwrap() - contentBoxInset.verticalAxisSum()) : OptionalFloat.NONE
         );
 
         // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
         // is ComputeSize (and thus the container's size is all that we're interested in)
         if (runMode == ComputeSize) {
-            if (outerNodeSize.width != null && outerNodeSize.height != null)
-                return LayoutOutput.fromOuterSize(new Size(outerNodeSize.width, outerNodeSize.height));
+            if (outerNodeSize.width.isSome() && outerNodeSize.height.isSome())
+                return LayoutOutput.fromOuterSize(new Size(outerNodeSize.width.unwrap(), outerNodeSize.height.unwrap()));
 
             // We can also short-circuit if the width is known and only the width has been requested.
-            if (inputs.axis == Horizontal && outerNodeSize.width != null)
-                return LayoutOutput.fromOuterSize(new Size(outerNodeSize.width, 0.0));
+            if (inputs.axis == Horizontal && outerNodeSize.width.isSome())
+                return LayoutOutput.fromOuterSize(new Size(outerNodeSize.width.unwrap(), 0.0));
         }
 
         // 2. Resolve the explicit grid
@@ -169,8 +172,8 @@ class GridLayout {
         //   - then the number of repetitions is the smallest possible positive integer that fulfills that minimum requirement
         // Otherwise, the specified track list repeats only once.
         final autoRepeatFitStrategy = outerNodeSize.or(maxSize);
-        final widthStrategy:AutoRepeatStrategy = autoRepeatFitStrategy.width != null ? MaxRepetitionsThatDoNotOverflow : MinRepetitionsThatDoOverflow;
-        final heightStrategy:AutoRepeatStrategy = autoRepeatFitStrategy.height != null ? MaxRepetitionsThatDoNotOverflow : MinRepetitionsThatDoOverflow;
+        final widthStrategy:AutoRepeatStrategy = autoRepeatFitStrategy.width.isSome() ? MaxRepetitionsThatDoNotOverflow : MinRepetitionsThatDoOverflow;
+        final heightStrategy:AutoRepeatStrategy = autoRepeatFitStrategy.height.isSome() ? MaxRepetitionsThatDoNotOverflow : MinRepetitionsThatDoOverflow;
 
         // Compute the number of rows and columns in the explicit grid *template*
         // (explicit tracks from grid_areas are computed separately below)
@@ -261,8 +264,8 @@ class GridLayout {
         TrackSizing.trackSizingAlgorithm(tree, Inline, innerMinSize.get(Inline), innerMaxSize.get(Inline), justifyContent, alignContent,
             availableGridSpace, innerNodeSize, columns, rows, items, GridItem.ESTIMATE_MAX_TRACK_DEFINITE_VALUE, hasBaselineAlignedItem);
         final initialColumnSum = sumBaseSizes(columns);
-        if (innerNodeSize.width == null)
-            innerNodeSize = innerNodeSize.withWidth(initialColumnSum);
+        if (innerNodeSize.width.isNone())
+            innerNodeSize = innerNodeSize.withWidth(OptionalFloat.some(initialColumnSum));
 
         // If only the container's width has been requested then we can skip sizing the rows entirely (which avoids
         // measuring the height of every item), as column sizing is not re-run when only computing the container's size.
@@ -284,9 +287,9 @@ class GridLayout {
 
         // 6. Compute container size
         final resolvedStyleSize = knownOrPreferred;
-        var containerBorderBoxWidth = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.width != null ? (resolvedStyleSize.width : Float) : initialColumnSum
+        var containerBorderBoxWidth = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.width.isSome() ? resolvedStyleSize.width.unwrap() : initialColumnSum
             + contentBoxInset.horizontalAxisSum(), minSize.width, maxSize.width), paddingBorderSize.width);
-        var containerBorderBoxHeight = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.height != null ? (resolvedStyleSize.height : Float) : initialRowSum
+        var containerBorderBoxHeight = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.height.isSome() ? resolvedStyleSize.height.unwrap() : initialRowSum
             + contentBoxInset.verticalAxisSum(), minSize.height, maxSize.height), paddingBorderSize.height);
         var containerContentBoxWidth = Sys.f32Max(0.0, containerBorderBoxWidth - contentBoxInset.horizontalAxisSum());
         var containerContentBoxHeight = Sys.f32Max(0.0, containerBorderBoxHeight - contentBoxInset.verticalAxisSum());
@@ -297,7 +300,7 @@ class GridLayout {
 
         // The container's size is now determined, so percentages resolve against its content box when re-running track sizing.
         // This may be a no-op if the container's size was known upfront (in which case it already equals `inner_node_size`).
-        innerNodeSize = new SizeOf<Null<Float>>(containerContentBoxWidth, containerContentBoxHeight);
+        innerNodeSize = new SizeOpt(OptionalFloat.some(containerContentBoxWidth), OptionalFloat.some(containerContentBoxHeight));
 
         // Column sizing must be re-run (once) if:
         //   - The grid container's width was initially indefinite and there are any columns with percentage track sizing functions
@@ -308,7 +311,7 @@ class GridLayout {
 
         final hasPercentageColumn = anyTrackUsesPercentage(columns);
         final hasPercentageRow = anyTrackUsesPercentage(rows);
-        final parentWidthIndefinite = outerNodeSize.width == null;
+        final parentWidthIndefinite = outerNodeSize.width.isNone();
         rerunColumnSizing = parentWidthIndefinite && hasPercentageColumn;
 
         if (!rerunColumnSizing) {
@@ -317,15 +320,15 @@ class GridLayout {
                 if (!item.crossesIntrinsicColumn)
                     continue;
                 final gridAreaSize = item.gridAreaSize(Inline, columns, rows, innerNodeSize, GridItem.ESTIMATE_BASE_SIZE);
-                final itemAvailableSpace = gridAreaSize.with(Inline, null);
+                final itemAvailableSpace = gridAreaSize.with(Inline, OptionalFloat.NONE);
                 final newMinContentContribution = item.minContentContribution(Inline, tree, gridAreaSize, itemAvailableSpace);
 
-                final hasChanged = item.minContentContributionCacheWidth == null || newMinContentContribution != (item.minContentContributionCacheWidth : Float);
+                final hasChanged = item.minContentContributionCacheWidth.isNone() || newMinContentContribution != item.minContentContributionCacheWidth.unwrap();
 
                 item.gridAreaSizeCache = gridAreaSize;
-                item.minContentContributionCacheWidth = newMinContentContribution;
-                item.maxContentContributionCacheWidth = null;
-                item.minimumContributionCacheWidth = null;
+                item.minContentContributionCacheWidth = OptionalFloat.some(newMinContentContribution);
+                item.maxContentContributionCacheWidth = OptionalFloat.NONE;
+                item.minimumContributionCacheWidth = OptionalFloat.NONE;
 
                 if (hasChanged)
                     intrinsicColumnContributionChanged = true;
@@ -336,9 +339,9 @@ class GridLayout {
             // Clear intrinsic width caches
             for (item in items) {
                 item.gridAreaSizeCache = null;
-                item.minContentContributionCacheWidth = null;
-                item.maxContentContributionCacheWidth = null;
-                item.minimumContributionCacheWidth = null;
+                item.minContentContributionCacheWidth = OptionalFloat.NONE;
+                item.maxContentContributionCacheWidth = OptionalFloat.NONE;
+                item.minimumContributionCacheWidth = OptionalFloat.NONE;
             }
         }
 
@@ -346,7 +349,7 @@ class GridLayout {
         //   - The grid container's height was initially indefinite and there are any rows with percentage track sizing functions
         //   - Column sizing was re-run and any grid item crossing an intrinsically sized track's min content contribution height has changed
         // TODO: Only rerun sizing for tracks that actually require it rather than for all tracks if any need it.
-        final parentHeightIndefinite = outerNodeSize.height == null;
+        final parentHeightIndefinite = outerNodeSize.height.isNone();
         var rerunRowSizing = parentHeightIndefinite && hasPercentageRow;
         var intrinsicRowContributionChanged = false;
 
@@ -354,9 +357,9 @@ class GridLayout {
             // Clear intrinsic height caches
             for (item in items) {
                 item.gridAreaSizeCache = null;
-                item.minContentContributionCacheHeight = null;
-                item.maxContentContributionCacheHeight = null;
-                item.minimumContributionCacheHeight = null;
+                item.minContentContributionCacheHeight = OptionalFloat.NONE;
+                item.maxContentContributionCacheHeight = OptionalFloat.NONE;
+                item.minimumContributionCacheHeight = OptionalFloat.NONE;
             }
         }
 
@@ -373,16 +376,16 @@ class GridLayout {
                     if (!item.crossesIntrinsicRow)
                         continue;
                     final gridAreaSize = item.gridAreaSize(Block, rows, columns, innerNodeSize, GridItem.ESTIMATE_BASE_SIZE);
-                    final itemAvailableSpace = gridAreaSize.with(Block, null);
+                    final itemAvailableSpace = gridAreaSize.with(Block, OptionalFloat.NONE);
                     final newMinContentContribution = item.minContentContribution(Block, tree, gridAreaSize, itemAvailableSpace);
 
-                    final hasChanged = item.minContentContributionCacheHeight == null
-                        || newMinContentContribution != (item.minContentContributionCacheHeight : Float);
+                    final hasChanged = item.minContentContributionCacheHeight.isNone()
+                        || newMinContentContribution != item.minContentContributionCacheHeight.unwrap();
 
                     item.gridAreaSizeCache = gridAreaSize;
-                    item.minContentContributionCacheHeight = newMinContentContribution;
-                    item.maxContentContributionCacheHeight = null;
-                    item.minimumContributionCacheHeight = null;
+                    item.minContentContributionCacheHeight = OptionalFloat.some(newMinContentContribution);
+                    item.maxContentContributionCacheHeight = OptionalFloat.NONE;
+                    item.minimumContributionCacheHeight = OptionalFloat.NONE;
 
                     if (hasChanged)
                         intrinsicRowContributionChanged = true;
@@ -403,13 +406,13 @@ class GridLayout {
             final finalRowSum = sumBaseSizes(rows);
 
             if (intrinsicColumnContributionChanged && !hasPercentageColumn) {
-                containerBorderBoxWidth = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.width != null ? (resolvedStyleSize.width : Float) : finalColumnSum
+                containerBorderBoxWidth = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.width.isSome() ? resolvedStyleSize.width.unwrap() : finalColumnSum
                     + contentBoxInset.horizontalAxisSum(), minSize.width, maxSize.width), paddingBorderSize.width);
                 containerContentBoxWidth = Sys.f32Max(0.0, containerBorderBoxWidth - contentBoxInset.horizontalAxisSum());
             }
 
             if (intrinsicRowContributionChanged && !hasPercentageRow) {
-                containerBorderBoxHeight = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.height != null ? (resolvedStyleSize.height : Float) : finalRowSum
+                containerBorderBoxHeight = Sys.f32Max(MaybeMath.maybeClampF(resolvedStyleSize.height.isSome() ? resolvedStyleSize.height.unwrap() : finalRowSum
                     + contentBoxInset.verticalAxisSum(), minSize.height, maxSize.height), paddingBorderSize.height);
                 containerContentBoxHeight = Sys.f32Max(0.0, containerBorderBoxHeight - contentBoxInset.verticalAxisSum());
             }
@@ -481,7 +484,7 @@ class GridLayout {
             // Position hidden child
             if (childStyle.boxGenerationMode() == None) {
                 tree.setUnroundedLayout(child, Layout.withOrder(order));
-                LayoutPartialTreeExt.performChildLayout(tree, child, OptionSizeTools.NONE, OptionSizeTools.NONE, AvailableSpaceSizeTools.MAX_CONTENT,
+                LayoutPartialTreeExt.performChildLayout(tree, child, SizeOpt.NONE, SizeOpt.NONE, SizeAvail.MAX_CONTENT,
                     InherentSize, FALSE_LINE);
                 order++;
                 continue;
@@ -561,8 +564,8 @@ class GridLayout {
 
         // Determine the grid container baseline(s) (currently we only compute the first baseline)
         // Layout containment suppresses the box's baseline for baseline-alignment purposes
-        final gridContainerBaseline:Null<Float> = if (contain.suppressesBaseline()) {
-            null;
+        final gridContainerBaseline:OptionalFloat = if (contain.suppressesBaseline()) {
+            OptionalFloat.NONE;
         }
         else {
             // Get the row index of the first row containing items
@@ -588,7 +591,7 @@ class GridLayout {
             }
             final item = baselineItem != null ? baselineItem : firstItem;
 
-            item.yPosition + (item.baseline != null ? (item.baseline : Float) : item.height);
+            OptionalFloat.some(item.yPosition + (item.baseline.isSome() ? item.baseline.unwrap() : item.height));
         }
 
         // A scroll container's own padding at the end of the content is part of its scrollable

@@ -402,6 +402,11 @@ private class CssTokenStream {
  */
 private class CssTokenizer {
 
+    /** `i32` bounds, exact (inline constants are left alone by the `F32` macro, as an f32 literal `i32::MAX` would round to 2^31) */
+    static inline final I32_MAX:Float = 2147483647.0;
+
+    static inline final I32_MIN:Float = -2147483648.0;
+
     final input:String;
 
     public var pos:Int = 0;
@@ -549,7 +554,7 @@ private class CssTokenizer {
         var intValue:Null<Int> = null;
         if (isInteger) {
             // Clamp to the i32 range like cssparser
-            intValue = value > 2147483647.0 ? 2147483647 : (value < -2147483648.0 ? -2147483648 : Std.int(value));
+            intValue = value > I32_MAX ? 2147483647 : (value < I32_MIN ? -2147483648 : Std.int(value));
         }
         if (charAt(pos) == "%".code) {
             pos++;

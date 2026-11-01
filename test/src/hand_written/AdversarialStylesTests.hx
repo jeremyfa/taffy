@@ -16,6 +16,7 @@ import taffy.style.Direction;
 import taffy.style.GridPlacement;
 import taffy.style.GridTemplateComponent;
 import taffy.style.TrackSizingFunction;
+import taffy.geometry.SizeAvail;
 
 /**
  * Tests for style inputs which are valid to construct, but which are degenerate or hostile
@@ -39,7 +40,7 @@ class AdversarialStylesTests {
         ];
     }
 
-    static function definiteSquare(size:Float):SizeOf<AvailableSpace> {
+    static function definiteSquare(size:Float):SizeAvail {
         return definite(size, size);
     }
 

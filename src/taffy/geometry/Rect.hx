@@ -5,6 +5,7 @@
 package taffy.geometry;
 
 import taffy.style.FlexDirection;
+import taffy.util.OptionalFloat;
 import taffy.util.Sys;
 
 /**
@@ -31,6 +32,12 @@ class Rect {
     public final bottom:Float;
 
     public inline function new(left:Float, right:Float, top:Float, bottom:Float) {
+        #if taffy_census
+        taffy.util.Census.conc(left);
+        taffy.util.Census.conc(right);
+        taffy.util.Census.conc(top);
+        taffy.util.Census.conc(bottom);
+        #end
         this.left = left;
         this.right = right;
         this.top = top;
@@ -131,9 +138,9 @@ class Rect {
         return new Rect(Sys.f32Min(left, other.left), Sys.f32Max(right, other.right), Sys.f32Min(top, other.top), Sys.f32Max(bottom, other.bottom));
     }
 
-    /** Convert to a `RectOf<Null<Float>>` with all sides set */
-    public inline function toOptions():RectOf<Null<Float>> {
-        return new RectOf<Null<Float>>(left, right, top, bottom);
+    /** Convert to a `RectOpt` with all sides set */
+    public inline function toOptions():RectOpt {
+        return new RectOpt(OptionalFloat.some(left), OptionalFloat.some(right), OptionalFloat.some(top), OptionalFloat.some(bottom));
     }
 
     public inline function equals(other:Rect):Bool {

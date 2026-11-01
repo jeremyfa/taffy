@@ -12,6 +12,7 @@ import taffy.style.Clear;
 import taffy.style.Direction;
 import taffy.style.FloatDirection;
 import taffy.util.Sys;
+import taffy.util.OptionalFloat;
 
 /**
  * Context for each individual Block within a Block Formatting Context.
@@ -131,9 +132,9 @@ class BlockContext {
     }
 
     /** Get the bottom of lowest relevant float for the specific clear property */
-    public function clearedThreshold(clear:Clear):Null<Float> {
+    public function clearedThreshold(clear:Clear):OptionalFloat {
         final threshold = bfc.floatContext.clearedThreshold(clear);
-        return threshold != null ? (threshold : Float) - yOffset : null;
+        return threshold.isSome() ? OptionalFloat.some(threshold.unwrap() - yOffset) : OptionalFloat.NONE;
     }
 
     /** Whether a float that is adjoining the current margin-collapse strut has been placed on the relevant side(s) */

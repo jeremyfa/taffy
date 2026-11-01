@@ -11,6 +11,8 @@ import taffy.style.LengthPercentage;
 import taffy.style.Style;
 import taffy.tree.NodeId;
 import taffy.tree.TaffyTree;
+import taffy.style.AvailableSpace.Definite;
+import taffy.geometry.SizeAvail;
 
 /**
  * A small benchmark: a nested flex tree of text-like leaves, fully relaid out (cache cleared) every iteration.
@@ -21,10 +23,10 @@ class Bench {
     static function main() {
         final tree = new TaffyTree<Int>();
         final root = build(tree, 0);
-        final available = new SizeOf<AvailableSpace>(Definite(1200), Definite(800));
+        final available = new SizeAvail(Definite(1200), Definite(800));
         final measure = (inputs, nodeId, context:Null<Int>, style) -> Leaf.computeLeafLayout(inputs, style, (known, avail) -> {
-            final w = known.width != null ? (known.width : Float) : 8.0 * (context != null ? context : 0);
-            final h = known.height != null ? (known.height : Float) : 16.0;
+            final w = known.width.isSome() ? known.width.unwrap() : 8.0 * (context != null ? context : 0);
+            final h = known.height.isSome() ? known.height.unwrap() : 16.0;
             return new Size(w, h);
         });
         // Warm up

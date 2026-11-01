@@ -7,6 +7,7 @@ package taffy.tree;
 import taffy.geometry.Size;
 import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
+import taffy.style.AvailableSpace.Definite;
 
 /**
  * The cache key of a layout input.
@@ -46,15 +47,15 @@ private class CacheKey {
         final kdw = kd.width;
         final kdh = kd.height;
         var flags = 0;
-        if (kdw != null) {
-            kdAvWidth = kdw;
+        if (kdw.isSome()) {
+            kdAvWidth = kdw.unwrap();
             flags |= 1;
         }
         else {
             kdAvWidth = availableSpaceCacheKey(av.width);
         }
-        if (kdh != null) {
-            kdAvHeight = kdh;
+        if (kdh.isSome()) {
+            kdAvHeight = kdh.unwrap();
             flags |= 2;
         }
         else {
@@ -63,15 +64,15 @@ private class CacheKey {
         kdFlags = flags;
         final pw = input.parentSize.width;
         final ph = input.parentSize.height;
-        parentWidth = pw != null ? Math.abs(pw) : Math.POSITIVE_INFINITY;
-        parentHeight = ph != null ? Math.abs(ph) : Math.POSITIVE_INFINITY;
+        parentWidth = pw.isSome() ? Math.abs(pw.unwrap()) : Math.POSITIVE_INFINITY;
+        parentHeight = ph.isSome() ? Math.abs(ph.unwrap()) : Math.POSITIVE_INFINITY;
         axisBits = switch input.axis {
             case Horizontal: 1;
             case Vertical: 2;
             case Both: 3;
         }
         final kdd = input.knownDimensionsAreDefinite;
-        definite = ((kdd.width || kdw == null) ? 1 : 0) | ((kdd.height || kdh == null) ? 2 : 0);
+        definite = ((kdd.width || kdw.isNone()) ? 1 : 0) | ((kdd.height || kdh.isNone()) ? 2 : 0);
     }
 
     public inline function copyFrom(other:CacheKey):Void {
@@ -108,9 +109,9 @@ private class CacheKey {
     /** Encode an available space like Rust: definite values are negated, min-content is -infinity, max-content is +infinity */
     static inline function availableSpaceCacheKey(input:AvailableSpace):Float {
         return switch input {
-            case Definite(value): -value;
             case MinContent: Math.NEGATIVE_INFINITY;
             case MaxContent: Math.POSITIVE_INFINITY;
+            case definite: -definite.definiteValue();
         }
     }
 

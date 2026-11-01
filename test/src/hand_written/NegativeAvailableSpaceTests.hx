@@ -16,6 +16,7 @@ import taffy.style.LengthPercentageAuto;
 import taffy.style.Style;
 import taffy.tree.LayoutInput;
 import taffy.tree.NodeId;
+import taffy.style.AvailableSpace.Definite;
 
 class NegativeAvailableSpaceTests {
 
@@ -27,15 +28,12 @@ class NegativeAvailableSpaceTests {
         ];
     }
 
-    static function isNegative(value:Null<Float>):Bool {
-        return value != null && (value : Float) < 0.0;
+    static function isNegative(value:taffy.util.OptionalFloat):Bool {
+        return value.isSome() && value.unwrap() < 0.0;
     }
 
     static function isNegativeAvail(value:AvailableSpace):Bool {
-        return switch value {
-            case Definite(v): v < 0.0;
-            case _: false;
-        }
+        return value.isDefinite() && value.definiteValue() < 0.0;
     }
 
     /**

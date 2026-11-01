@@ -28,6 +28,8 @@ import taffy.geometry.AbsoluteAxis;
 import taffy.geometry.LineOf;
 import taffy.geometry.RectOf;
 import taffy.geometry.SizeOf;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
 import taffy.style.AlignItems;
 import taffy.style.Dimension;
 import taffy.style.Display;
@@ -134,6 +136,9 @@ class GridUnitTests {
         final failures:Array<String> = [];
         var passed = 0;
         for (test in tests) {
+            #if taffy_census
+            final censusBefore = taffy.util.Census.optNaN + taffy.util.Census.optPosInf + taffy.util.Census.optNegInf;
+            #end
             try {
                 test.fn();
                 passed++;
@@ -141,6 +146,11 @@ class GridUnitTests {
             catch (e:Dynamic) {
                 failures.push('grid ${test.name}: $e');
             }
+            #if taffy_census
+            final censusAfter = taffy.util.Census.optNaN + taffy.util.Census.optPosInf + taffy.util.Census.optNegInf;
+            if (censusAfter != censusBefore)
+                FileIO.println('  census: ' + (censusAfter - censusBefore) + ' NaN/inf optional values in grid ' + test.name);
+            #end
         }
         return {passed: passed, total: tests.length, failures: failures};
     }
@@ -235,8 +245,8 @@ class GridUnitTests {
         return GridPlacement.Auto;
     }
 
-    static function preferredSize(style:Style):SizeOf<Null<Float>> {
-        return new SizeOf<Null<Float>>(style.size.width.intoOption(), style.size.height.intoOption());
+    static function preferredSize(style:Style):SizeOpt {
+        return new SizeOpt(style.size.width.intoOption(), style.size.height.intoOption());
     }
 
     static function gridStyle(columns:Array<GridTemplateComponent>, rows:Array<GridTemplateComponent>):Style {
@@ -251,7 +261,7 @@ class GridUnitTests {
         return [for (v in values) GridHelpers.length(v)];
     }
 
-    static function explicitSizes(style:Style, size:SizeOf<Null<Float>>, strategy:AutoRepeatStrategy):Array<Int> {
+    static function explicitSizes(style:Style, size:SizeOpt, strategy:AutoRepeatStrategy):Array<Int> {
         final col = ExplicitGrid.computeExplicitGridSizeInAxis(style, size.width, strategy, Horizontal);
         final row = ExplicitGrid.computeExplicitGridSizeInAxis(style, size.height, strategy, Vertical);
         return [col.autoRepetitionCount, col.trackCount, row.autoRepetitionCount, row.trackCount];
@@ -382,7 +392,7 @@ class GridUnitTests {
     static function explicitGridSizingAutoFillMinSizeExactFit():Void {
         final style = gridStyle([GridHelpers.repeat(AutoFill, lengths([40.0]))], [GridHelpers.repeat(AutoFill, lengths([20.0]))]);
         style.minSize = new SizeOf<LengthPercentageAuto>(LengthPercentageAuto.length(120.0), LengthPercentageAuto.length(80.0));
-        final r = explicitSizes(style, new SizeOf<Null<Float>>(120.0, 80.0), MinRepetitionsThatDoOverflow);
+        final r = explicitSizes(style, new SizeOpt(OptionalFloat.some(120.0), OptionalFloat.some(80.0)), MinRepetitionsThatDoOverflow);
         eqInt(r[1], 3, "col_count");
         eqInt(r[3], 4, "row_count");
         eqInt(r[0], 3, "auto_col_reps");
@@ -392,7 +402,7 @@ class GridUnitTests {
     static function explicitGridSizingAutoFillMinSizeNonExactFit():Void {
         final style = gridStyle([GridHelpers.repeat(AutoFill, lengths([40.0]))], [GridHelpers.repeat(AutoFill, lengths([20.0]))]);
         style.minSize = new SizeOf<LengthPercentageAuto>(LengthPercentageAuto.length(140.0), LengthPercentageAuto.length(90.0));
-        final r = explicitSizes(style, new SizeOf<Null<Float>>(140.0, 90.0), MinRepetitionsThatDoOverflow);
+        final r = explicitSizes(style, new SizeOpt(OptionalFloat.some(140.0), OptionalFloat.some(90.0)), MinRepetitionsThatDoOverflow);
         eqInt(r[1], 4, "col_count");
         eqInt(r[3], 5, "row_count");
         eqInt(r[0], 4, "auto_col_reps");
@@ -448,7 +458,7 @@ class GridUnitTests {
         style.size = new SizeOf<Dimension>(Dimension.length(120.0), Dimension.length(120.0));
         style.padding = new RectOf<LengthPercentage>(LengthPercentage.length(10.0), LengthPercentage.length(10.0), LengthPercentage.length(20.0),
             LengthPercentage.length(20.0));
-        final r = explicitSizes(style, new SizeOf<Null<Float>>(100.0, 80.0), MaxRepetitionsThatDoNotOverflow);
+        final r = explicitSizes(style, new SizeOpt(OptionalFloat.some(100.0), OptionalFloat.some(80.0)), MaxRepetitionsThatDoNotOverflow);
         eqInt(r[1], 5, "col_count"); // 40px horizontal padding
         eqInt(r[3], 4, "row_count"); // 20px vertical padding
         eqInt(r[0], 5, "auto_col_reps");
@@ -457,7 +467,7 @@ class GridUnitTests {
 
     static function autoRepeatClampingPreservesTemplateSourceOrder():Void {
         final autoRepeatFirst = gridStyle([GridHelpers.repeat(AutoFill, lengths([2.0])), GridHelpers.repeatCount(10000, lengths([37.0]))], []);
-        final first = ExplicitGrid.computeExplicitGridSizeInAxis(autoRepeatFirst, null, MaxRepetitionsThatDoNotOverflow, Horizontal);
+        final first = ExplicitGrid.computeExplicitGridSizeInAxis(autoRepeatFirst, OptionalFloat.NONE, MaxRepetitionsThatDoNotOverflow, Horizontal);
         eqInt(first.autoRepetitionCount, 1, "repetitions");
         eqInt(first.trackCount, 10000, "track count");
         final tracks:Array<GridTrack> = [];
@@ -467,7 +477,7 @@ class GridUnitTests {
         check(tracks[3].minTrackSizingFunction.equals(MinTrackSizingFunction.length(37.0)), "tracks[3]");
 
         final autoRepeatLast = gridStyle([GridHelpers.repeatCount(10000, lengths([37.0])), GridHelpers.repeat(AutoFill, lengths([2.0]))], []);
-        final last = ExplicitGrid.computeExplicitGridSizeInAxis(autoRepeatLast, null, MaxRepetitionsThatDoNotOverflow, Horizontal);
+        final last = ExplicitGrid.computeExplicitGridSizeInAxis(autoRepeatLast, OptionalFloat.NONE, MaxRepetitionsThatDoNotOverflow, Horizontal);
         eqInt(last.autoRepetitionCount, 0, "repetitions (last)");
         eqInt(last.trackCount, 10000, "track count (last)");
     }
@@ -479,7 +489,7 @@ class GridUnitTests {
             GridHelpers.repeatCount(U16_MAX, repeatedTracks),
             GridHelpers.repeat(AutoFill, lengths([1.0]))
         ], []);
-        final result = ExplicitGrid.computeExplicitGridSizeInAxis(style, null, MaxRepetitionsThatDoNotOverflow, Horizontal);
+        final result = ExplicitGrid.computeExplicitGridSizeInAxis(style, OptionalFloat.NONE, MaxRepetitionsThatDoNotOverflow, Horizontal);
         eqInt(result.autoRepetitionCount, 0, "repetitions");
         eqInt(result.trackCount, 10000, "track count");
     }

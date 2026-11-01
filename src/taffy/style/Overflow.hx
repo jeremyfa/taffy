@@ -4,6 +4,8 @@
 
 package taffy.style;
 
+import taffy.util.OptionalFloat;
+
 /**
  * How children overflowing their container should affect layout.
  *
@@ -29,8 +31,8 @@ enum abstract Overflow(Int) {
     }
 
     /** Returns `0.0` if the overflow mode would cause the automatic minimum size of a flexbox or CSS Grid item to be 0, else null */
-    public inline function maybeIntoAutomaticMinSize():Null<Float> {
-        return isScrollContainer() ? 0.0 : null;
+    public inline function maybeIntoAutomaticMinSize():OptionalFloat {
+        return isScrollContainer() ? OptionalFloat.some(0.0) : OptionalFloat.NONE;
     }
 
     /** Parse a CSS keyword, or return null */

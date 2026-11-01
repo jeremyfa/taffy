@@ -21,6 +21,10 @@ class PointOf<T> {
     public final y:T;
 
     public inline function new(x:T, y:T) {
+        #if taffy_census
+        taffy.util.Census.any(x, 'PointOf.new');
+        taffy.util.Census.any(y, 'PointOf.new');
+        #end
         this.x = x;
         this.y = y;
     }
@@ -66,15 +70,5 @@ class PointOf<T> {
     public function toString():String {
         return 'Point(x: $x, y: $y)';
     }
-
-}
-
-/**
- * Helpers for `PointOf<Null<Float>>` (Rust `Point<Option<f32>>`).
- */
-class OptionPointTools {
-
-    /** A `PointOf<Null<Float>>` with both components set to `null` (Rust `Point::NONE`) */
-    public static final NONE:PointOf<Null<Float>> = new PointOf<Null<Float>>(null, null);
 
 }

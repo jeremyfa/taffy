@@ -17,6 +17,8 @@ import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
 import taffy.style.Display;
 import taffy.style.Style;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.SizeAvail;
 
 /**
  * The function used by `TaffyTree.computeLayoutWithMeasure` to lay out leaf nodes:
@@ -420,7 +422,7 @@ class TaffyTree<NodeContext> {
     }
 
     /** Updates the stored layout of the provided `node` and its children, using the given measure function for leaves */
-    public function computeLayoutWithMeasure(nodeId:NodeId, availableSpace:SizeOf<AvailableSpace>, measureFunction:MeasureFunction<NodeContext>):Void {
+    public function computeLayoutWithMeasure(nodeId:NodeId, availableSpace:SizeAvail, measureFunction:MeasureFunction<NodeContext>):Void {
         node(nodeId);
         var taffyView = view;
         if (taffyView == null) {
@@ -436,7 +438,7 @@ class TaffyTree<NodeContext> {
     }
 
     /** Updates the stored layout of the provided `node` and its children (leaves are measured as zero size) */
-    public function computeLayout(nodeId:NodeId, availableSpace:SizeOf<AvailableSpace>):Void {
+    public function computeLayout(nodeId:NodeId, availableSpace:SizeAvail):Void {
         computeLayoutWithMeasure(nodeId, availableSpace, defaultMeasure);
     }
 
@@ -444,7 +446,7 @@ class TaffyTree<NodeContext> {
         return Leaf.computeLeafLayout(inputs, style, zeroMeasure);
     }
 
-    static function zeroMeasure(knownDimensions:SizeOf<Null<Float>>, availableSpace:SizeOf<AvailableSpace>):Size {
+    static function zeroMeasure(knownDimensions:SizeOpt, availableSpace:SizeAvail):Size {
         return Size.ZERO;
     }
 

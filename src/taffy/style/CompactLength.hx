@@ -4,6 +4,8 @@
 
 package taffy.style;
 
+import taffy.util.OptionalFloat;
+
 /**
  * A representation of a length as a compact value: a tag plus a float value.
  *
@@ -227,8 +229,8 @@ final class CompactLength {
     }
 
     /** Resolve percentage values against the passed parent_size, returning null for non-percentage values */
-    public inline function resolvedPercentageSize(parentSize:Float):Null<Float> {
-        return tag == PERCENT_TAG ? value * parentSize : null;
+    public inline function resolvedPercentageSize(parentSize:Float):OptionalFloat {
+        return tag == PERCENT_TAG ? OptionalFloat.some(value * parentSize) : OptionalFloat.NONE;
     }
 
     /** Structural equality */

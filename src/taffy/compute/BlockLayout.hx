@@ -48,6 +48,11 @@ import taffy.tree.OofCandidates;
 import taffy.tree.OofPositioningArea;
 import taffy.tree.RunMode;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.geometry.RectOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.style.AvailableSpace;
@@ -64,9 +69,9 @@ private class InFlowResult {
     public final contentHeight:Float;
     public final firstChildTopMarginSet:CollapsibleMarginSet;
     public final lastChildBottomMarginSet:CollapsibleMarginSet;
-    public final firstBaseline:Null<Float>;
+    public final firstBaseline:OptionalFloat;
 
-    public function new(inflowOverflowRect:Rect, contentHeight:Float, firstChildTopMarginSet:CollapsibleMarginSet, lastChildBottomMarginSet:CollapsibleMarginSet, firstBaseline:Null<Float>) {
+    public function new(inflowOverflowRect:Rect, contentHeight:Float, firstChildTopMarginSet:CollapsibleMarginSet, lastChildBottomMarginSet:CollapsibleMarginSet, firstBaseline:OptionalFloat) {
         this.inflowOverflowRect = inflowOverflowRect;
         this.contentHeight = contentHeight;
         this.firstChildTopMarginSet = firstChildTopMarginSet;
@@ -128,7 +133,7 @@ class BlockLayout {
                 .maybeClamp(minSize, maxSize);
         }
         else {
-            OptionSizeTools.NONE;
+            SizeOpt.NONE;
         }
 
         // If both min and max in a given axis are set and max <= min then this determines the size in that axis
@@ -141,12 +146,12 @@ class BlockLayout {
         if (runMode == ComputeSize) {
             final width = styledBasedKnownDimensions.width;
             final height = styledBasedKnownDimensions.height;
-            if (width != null && height != null) {
-                return LayoutOutput.fromOuterSize(new Size(width, height));
+            if (width.isSome() && height.isSome()) {
+                return LayoutOutput.fromOuterSize(new Size(width.unwrap(), height.unwrap()));
             }
             // We can also short-circuit if the width is known and only the width has been requested.
-            if (inputs.axis == Horizontal && width != null) {
-                return LayoutOutput.fromOuterSize(new Size(width, 0.0));
+            if (inputs.axis == Horizontal && width.isSome()) {
+                return LayoutOutput.fromOuterSize(new Size(width.unwrap(), 0.0));
             }
         }
 
@@ -170,10 +175,10 @@ class BlockLayout {
     }
 
     /** If both min and max in a given axis are set and max <= min then this determines the size in that axis */
-    static inline function minMaxDefinite(minSize:SizeOf<Null<Float>>, maxSize:SizeOf<Null<Float>>):SizeOf<Null<Float>> {
-        return new SizeOf<Null<Float>>(
-            (minSize.width != null && maxSize.width != null && (maxSize.width : Float) <= (minSize.width : Float)) ? minSize.width : null,
-            (minSize.height != null && maxSize.height != null && (maxSize.height : Float) <= (minSize.height : Float)) ? minSize.height : null
+    static inline function minMaxDefinite(minSize:SizeOpt, maxSize:SizeOpt):SizeOpt {
+        return new SizeOpt(
+            (minSize.width.isSome() && maxSize.width.isSome() && maxSize.width.unwrap() <= minSize.width.unwrap()) ? minSize.width : OptionalFloat.NONE,
+            (minSize.height.isSome() && maxSize.height.isSome() && maxSize.height.unwrap() <= minSize.height.unwrap()) ? minSize.height : OptionalFloat.NONE
         );
     }
 
@@ -217,15 +222,15 @@ class BlockLayout {
         // to make the other definite. Only a newly-filled axis is adopted (and clamped).
         {
             final derived = knownDimensions.maybeApplyAspectRatio(aspectRatio).maybeClamp(minSize, maxSize);
-            knownDimensions = new SizeOf<Null<Float>>(
-                knownDimensions.width != null ? knownDimensions.width : derived.width,
-                knownDimensions.height != null ? knownDimensions.height : derived.height
+            knownDimensions = new SizeOpt(
+                knownDimensions.width.isSome() ? knownDimensions.width : derived.width,
+                knownDimensions.height.isSome() ? knownDimensions.height : derived.height
             );
         }
 
-        final percentageBasisDimensions = new SizeOf<Null<Float>>(
+        final percentageBasisDimensions = new SizeOpt(
             knownDimensions.width,
-            inputs.knownDimensionsAreDefinite.height ? knownDimensions.height : null
+            inputs.knownDimensionsAreDefinite.height ? knownDimensions.height : OptionalFloat.NONE
         );
         final containerContentBoxSize = percentageBasisDimensions.maybeSubSize(contentBoxInset.sumAxes());
 
@@ -253,7 +258,7 @@ class BlockLayout {
         );
         final ownMarginsCollapseWithChildren = new LineOf<Bool>(
             childrenMarginsAdjoinOwnEdges.start,
-            childrenMarginsAdjoinOwnEdges.end && size.height == null
+            childrenMarginsAdjoinOwnEdges.end && size.height.isNone()
         );
         final hasStylesPreventingBeingCollapsedThrough = !style.isBlock()
             || blockCtx.isBfcRoot()
@@ -271,18 +276,18 @@ class BlockLayout {
         final items = generateItemList(tree, nodeId, containerContentBoxSize);
 
         // 2. Compute container width
-        final containerOuterWidth:Float = if (knownDimensions.width != null) {
-            knownDimensions.width;
+        final containerOuterWidth:Float = if (knownDimensions.width.isSome()) {
+            knownDimensions.width.unwrap();
         }
         else {
-            final availableWidth = availableSpace.width.maybeSub(contentBoxInset.horizontalAxisSum());
+            final availableWidth = availableSpace.width.maybeSub(OptionalFloat.some(contentBoxInset.horizontalAxisSum()));
             final intrinsicWidth = determineContentBasedContainerWidth(tree, items, availableWidth) + contentBoxInset.horizontalAxisSum();
-            intrinsicWidth.maybeClampF(minSize.width, maxSize.width).maybeMaxF(paddingBorderSize.width);
+            intrinsicWidth.maybeClampF(minSize.width, maxSize.width).maybeMaxF(OptionalFloat.some(paddingBorderSize.width));
         }
 
         // Short-circuit if computing size and both dimensions known
-        if (runMode == ComputeSize && knownDimensions.height != null) {
-            return LayoutOutput.fromOuterSize(new Size(containerOuterWidth, knownDimensions.height));
+        if (runMode == ComputeSize && knownDimensions.height.isSome()) {
+            return LayoutOutput.fromOuterSize(new Size(containerOuterWidth, knownDimensions.height.unwrap()));
         }
 
         // We can also short-circuit if the width is known and only the width has been requested.
@@ -293,15 +298,15 @@ class BlockLayout {
         // Under `SizingMode.ContentSize` the container's own `height`/`min-height` are ignored,
         // so they cannot serve as the percentage basis for children either
         final containerPercentageResolutionHeight = percentageBasisDimensions.height
-            .or(inputs.sizingMode == InherentSize ? size.height.maybeMax(minSize.height) : null);
+            .or(inputs.sizingMode == InherentSize ? size.height.maybeMax(minSize.height) : OptionalFloat.NONE);
 
         // 3. Perform final item layout and return content height
         //
         // Percentage padding and borders resolve against the *containing block's* width
         // (`parentSize`), not the box's own width. Fall back to the box's own width when the parent size is unknown.
         final percentageResolutionWidth = parentSize.width.unwrapOr(containerOuterWidth);
-        final resolvedPadding = rawPadding.resolveOrZero(percentageResolutionWidth);
-        final resolvedBorder = rawBorder.resolveOrZero(percentageResolutionWidth);
+        final resolvedPadding = rawPadding.resolveOrZero(OptionalFloat.some(percentageResolutionWidth));
+        final resolvedBorder = rawBorder.resolveOrZero(OptionalFloat.some(percentageResolutionWidth));
         final resolvedContentBoxInset = resolvedPadding.add(resolvedBorder).add(scrollbarGutter);
 
         final result = performFinalLayoutOnInFlowChildren(
@@ -332,15 +337,15 @@ class BlockLayout {
             intrinsicOuterHeight = Sys.f32Max(intrinsicOuterHeight, blockCtx.floatedContentHeightContribution());
         }
 
-        final containerOuterHeight = (knownDimensions.height != null
-            ? (knownDimensions.height : Float)
-            : intrinsicOuterHeight.maybeClampF(minSize.height, maxSize.height)).maybeMaxF(paddingBorderSize.height);
+        final containerOuterHeight = (knownDimensions.height.isSome()
+            ? knownDimensions.height.unwrap()
+            : intrinsicOuterHeight.maybeClampF(minSize.height, maxSize.height)).maybeMaxF(OptionalFloat.some(paddingBorderSize.height));
         final finalOuterSize = new Size(containerOuterWidth, containerOuterHeight);
 
         // CSS2 8.3.1: the bottom margin of a block with `height: auto` collapses with its last
         // in-flow child's bottom margin only if the box's `min-height` is less than the box's used height.
         final minH = minSize.height;
-        final heightConstrainedByMinHeight = minH != null && (minH : Float) > 0.0 && (minH : Float) >= containerOuterHeight;
+        final heightConstrainedByMinHeight = minH.isSome() && minH.unwrap() > 0.0 && minH.unwrap() >= containerOuterHeight;
         final ownBottomMarginCollapsesWithChildren = ownMarginsCollapseWithChildren.end && !heightConstrainedByMinHeight;
 
         // Apply `align-content` to in-flow non-floated items if requested. For block layout the entire stack of
@@ -350,8 +355,8 @@ class BlockLayout {
             final inflowContentHeight = intrinsicOuterHeight - resolvedContentBoxInset.verticalAxisSum();
             final freeSpace = containerInnerHeight - inflowContentHeight;
             final groupOffset = computeBlockAlignContentOffset(alignContent, freeSpace);
-            if (firstBaseline != null)
-                firstBaseline = (firstBaseline : Float) + groupOffset;
+            if (firstBaseline.isSome())
+                firstBaseline = OptionalFloat.some(firstBaseline.unwrap() + groupOffset);
             var anyInFlow = false;
             for (item in items) {
                 final layout = item.finalLayout;
@@ -489,7 +494,7 @@ class BlockLayout {
             final childStyle = tree.getBlockChildStyle(child);
             if (childStyle.boxGenerationMode() == BoxGenerationMode.None) {
                 tree.setUnroundedLayout(child, Layout.withOrder(order));
-                tree.performChildLayout(child, OptionSizeTools.NONE, OptionSizeTools.NONE, AvailableSpaceSizeTools.MAX_CONTENT, InherentSize, FALSE_LINE);
+                tree.performChildLayout(child, SizeOpt.NONE, SizeOpt.NONE, SizeAvail.MAX_CONTENT, InherentSize, FALSE_LINE);
             }
         }
 
@@ -497,7 +502,7 @@ class BlockLayout {
     }
 
     /** Create an array of `BlockItem` where each item represents a child of the current node */
-    static function generateItemList(tree:LayoutBlockContainer, node:NodeId, nodeInnerSize:SizeOf<Null<Float>>):Array<BlockItem> {
+    static function generateItemList(tree:LayoutBlockContainer, node:NodeId, nodeInnerSize:SizeOpt):Array<BlockItem> {
         final items:Array<BlockItem> = [];
         final count = tree.childCount(node);
         var order = 0;
@@ -566,15 +571,15 @@ class BlockLayout {
      * Each of the item's block-axis margins is subtracted from the stretch size unless it is
      * flagged in `marginsTreatedAsZero`.
      */
-    static function resolveStretchHeight(heightStyle:Dimension, containerInnerHeight:Null<Float>, itemMargin:Rect, marginsTreatedAsZero:LineOf<Bool>):Null<Float> {
-        if (!heightStyle.isStretch() || containerInnerHeight == null)
-            return null;
-        var height:Float = containerInnerHeight;
+    static function resolveStretchHeight(heightStyle:Dimension, containerInnerHeight:OptionalFloat, itemMargin:Rect, marginsTreatedAsZero:LineOf<Bool>):OptionalFloat {
+        if (!heightStyle.isStretch() || containerInnerHeight.isNone())
+            return OptionalFloat.NONE;
+        var height:Float = containerInnerHeight.unwrap();
         if (!marginsTreatedAsZero.start)
             height -= itemMargin.top;
         if (!marginsTreatedAsZero.end)
             height -= itemMargin.bottom;
-        return height;
+        return OptionalFloat.some(height);
     }
 
     /** Compute the content-based width in the case that the width of the container is not known */
@@ -588,20 +593,20 @@ class BlockLayout {
             final itemXMarginSum = item.margin.resolveOrZero(availableWidth.intoOption()).horizontalAxisSum();
 
             var width:Float;
-            if (knownDimensions.width != null) {
-                width = knownDimensions.width;
+            if (knownDimensions.width.isSome()) {
+                width = knownDimensions.width.unwrap();
             }
             else {
-                final itemAvailableWidth = switch SizingKeyword.resolveSizingKeyword(item.sizeStyle.width, null, null) {
+                final itemAvailableWidth = switch SizingKeyword.resolveSizingKeyword(item.sizeStyle.width, OptionalFloat.NONE, OptionalFloat.NONE) {
                     case Measure(aw): aw;
                     case Exact(w): Definite(w);
-                    case null: availableWidth.maybeSub(itemXMarginSum);
+                    case null: availableWidth.maybeSub(OptionalFloat.some(itemXMarginSum));
                 }
                 width = tree.measureChildSize(
                     item.nodeId,
                     knownDimensions,
-                    OptionSizeTools.NONE,
-                    new SizeOf<AvailableSpace>(itemAvailableWidth, MinContent),
+                    SizeOpt.NONE,
+                    new SizeAvail(itemAvailableWidth, MinContent),
                     InherentSize,
                     Horizontal,
                     // Must match the value passed when laying the item out (see `Cache`)
@@ -630,7 +635,7 @@ class BlockLayout {
         runMode:RunMode,
         items:Array<BlockItem>,
         containerOuterWidth:Float,
-        containerPercentageResolutionHeight:Null<Float>,
+        containerPercentageResolutionHeight:OptionalFloat,
         contentBoxInset:Rect,
         resolvedContentBoxInset:Rect,
         resolvedBorder:Rect,
@@ -644,8 +649,8 @@ class BlockLayout {
     ):InFlowResult {
         // Resolve containerInnerWidth for sizing child nodes using initial contentBoxInset
         final containerInnerWidth = Sys.f32Max(containerOuterWidth - resolvedContentBoxInset.horizontalAxisSum(), 0.0);
-        final containerPercentageResolutionHeight = containerPercentageResolutionHeight.maybeSub(resolvedContentBoxInset.verticalAxisSum());
-        final parentSize = new SizeOf<Null<Float>>(containerInnerWidth, containerPercentageResolutionHeight);
+        final containerPercentageResolutionHeight = containerPercentageResolutionHeight.maybeSub(OptionalFloat.some(resolvedContentBoxInset.verticalAxisSum()));
+        final parentSize = new SizeOpt(OptionalFloat.some(containerInnerWidth), containerPercentageResolutionHeight);
 
         // TODO: handle nested blocks with different widths
         if (blockCtx.isBfcRoot()) {
@@ -666,7 +671,7 @@ class BlockLayout {
         var firstChildTopMarginSet = CollapsibleMarginSet.ZERO;
         var activeCollapsibleMarginSet = CollapsibleMarginSet.ZERO;
         var isCollapsingWithFirstMarginSet = true;
-        var firstBaseline:Null<Float> = null;
+        var firstBaseline:OptionalFloat = OptionalFloat.NONE;
         // Whether the active margin set contains the margins of a self-collapsing element with
         // clearance. Such margins collapse with the margins of following siblings but the resulting
         // margin does not collapse with the bottom margin of the parent block.
@@ -682,7 +687,7 @@ class BlockLayout {
             }
 
             final m = item.margin;
-            final itemMargin = new RectOf<Null<Float>>(
+            final itemMargin = new RectOpt(
                 m.left.resolveToOption(containerInnerWidth),
                 m.right.resolveToOption(containerInnerWidth),
                 m.top.resolveToOption(containerInnerWidth),
@@ -709,13 +714,13 @@ class BlockLayout {
                 // A float with `width: auto` is shrink-to-fit (fit-content) sized: the available
                 // space clamped between its min-content and max-content sizes.
                 final availableWidth = Sys.f32Max(containerInnerWidth - itemNonAutoXMarginSum, 0.0);
-                var itemKnownWidth:Null<Float> = null;
+                var itemKnownWidth:OptionalFloat = OptionalFloat.NONE;
                 var itemAvailableWidth:AvailableSpace;
-                switch SizingKeyword.resolveSizingKeyword(item.sizeStyle.width, availableWidth, containerInnerWidth) {
+                switch SizingKeyword.resolveSizingKeyword(item.sizeStyle.width, OptionalFloat.some(availableWidth), OptionalFloat.some(containerInnerWidth)) {
                     case Measure(available):
                         itemAvailableWidth = available;
                     case Exact(width):
-                        itemKnownWidth = width;
+                        itemKnownWidth = OptionalFloat.some(width);
                         itemAvailableWidth = Definite(width);
                     case null:
                         itemAvailableWidth = Definite(availableWidth);
@@ -729,9 +734,9 @@ class BlockLayout {
                 );
                 final itemLayout = tree.performChildLayout(
                     item.nodeId,
-                    new SizeOf<Null<Float>>(itemKnownWidth, itemKnownHeight),
+                    new SizeOpt(itemKnownWidth, itemKnownHeight),
                     parentSize,
-                    new SizeOf<AvailableSpace>(itemAvailableWidth, MaxContent),
+                    new SizeAvail(itemAvailableWidth, MaxContent),
                     InherentSize,
                     // A float establishes a new block formatting context: its margins do not
                     // collapse with the margins of its children
@@ -816,8 +821,8 @@ class BlockLayout {
                     // for the item's border box, which must not overlap any float
                     var slot = blockCtx.findBfcSlot(minY, itemNonAutoMargin.left, itemNonAutoMargin.right, direction, item.clear, -1);
                     while (slot.segmentId != -1) {
-                        final w = item.size.width != null
-                            ? (item.size.width : Float)
+                        final w = item.size.width.isSome()
+                            ? item.size.width.unwrap()
                             : Sys.f32Max(Sys.f32Max(slot.stretchWidth, minAutoWidth), 0.0);
                         final width = w.maybeClampF(item.minSize.width, item.maxSize.width);
                         if (width <= slot.borderWidth + FloatContext.FIT_TOLERANCE)
@@ -855,9 +860,9 @@ class BlockLayout {
             final hasNonStretchJustifySelf = !(justifySelf.keyword == AlignItemsKeyword.Normal || justifySelf.keyword == AlignItemsKeyword.Stretch);
 
             // Unless stretched, tables and compressible replaced elements resolve their own width
-            var knownDimensions:SizeOf<Null<Float>>;
+            var knownDimensions:SizeOpt;
             if ((item.isTable || item.isCompressibleReplaced) && !isStretch) {
-                knownDimensions = OptionSizeTools.NONE;
+                knownDimensions = SizeOpt.NONE;
             }
             else {
                 // The automatic width of a block-level box whose `justify-self` is neither `normal` nor `stretch`
@@ -866,20 +871,20 @@ class BlockLayout {
 
                 // Items with a sizing keyword width resolve their width either directly or by measuring
                 // the item under the corresponding available space constraint
-                final keywordWidth:Null<Float> = switch SizingKeyword.resolveSizingKeyword(widthStyle, stretchWidth, containerInnerWidth) {
-                    case Exact(width): width;
+                final keywordWidth:OptionalFloat = switch SizingKeyword.resolveSizingKeyword(widthStyle, OptionalFloat.some(stretchWidth), OptionalFloat.some(containerInnerWidth)) {
+                    case Exact(width): OptionalFloat.some(width);
                     case Measure(itemAvailableWidth):
-                        tree.measureChildSize(
+                        OptionalFloat.some(tree.measureChildSize(
                             item.nodeId,
-                            OptionSizeTools.NONE,
+                            SizeOpt.NONE,
                             parentSize,
-                            new SizeOf<AvailableSpace>(itemAvailableWidth, MaxContent),
+                            new SizeAvail(itemAvailableWidth, MaxContent),
                             InherentSize,
                             Horizontal,
                             // Must match the value passed when laying the item out (see `Cache`)
                             item.isInSameBfc ? TRUE_LINE : FALSE_LINE
-                        );
-                    case null: null;
+                        ));
+                    case null: OptionalFloat.NONE;
                 }
                 final keywordHeight = resolveStretchHeight(
                     item.sizeStyle.height,
@@ -887,10 +892,10 @@ class BlockLayout {
                     itemNonAutoMargin,
                     childrenMarginsAdjoinOwnEdges
                 );
-                final w:Float = item.size.width != null ? (item.size.width : Float) : (keywordWidth != null ? (keywordWidth : Float) : stretchWidth);
-                knownDimensions = new SizeOf<Null<Float>>(
-                    w.maybeClampF(item.minSize.width, item.maxSize.width),
-                    item.size.height != null ? item.size.height : keywordHeight
+                final w:Float = item.size.width.isSome() ? item.size.width.unwrap() : (keywordWidth.isSome() ? keywordWidth.unwrap() : stretchWidth);
+                knownDimensions = new SizeOpt(
+                    OptionalFloat.some(w.maybeClampF(item.minSize.width, item.maxSize.width)),
+                    item.size.height.isSome() ? item.size.height : keywordHeight
                 ).maybeClamp(item.minSize, item.maxSize);
             }
 
@@ -902,12 +907,12 @@ class BlockLayout {
                 TRUE_SIZE,
                 parentSize,
                 // Vertical available space in block flow is indefinite (MaxContent), not a min-content constraint
-                new SizeOf<AvailableSpace>(Definite(stretchWidth), MaxContent),
+                new SizeAvail(Definite(stretchWidth), MaxContent),
                 item.isInSameBfc ? TRUE_LINE : FALSE_LINE
             );
 
             final clearThreshold = blockCtx.clearedThreshold(item.clear);
-            final clearPos:Float = clearThreshold != null ? (clearThreshold : Float) : Math.NEGATIVE_INFINITY;
+            final clearPos:Float = clearThreshold.isSome() ? clearThreshold.unwrap() : Math.NEGATIVE_INFINITY;
 
             // The height consumed by floats within a same-BFC child, relative to the child's
             // border-top. Added to the parent's contribution once the child's position is known.
@@ -947,7 +952,7 @@ class BlockLayout {
             // Expand auto margins to fill available space
             // Note: Vertical auto-margins for relatively positioned block items simply resolve to 0.
             final freeXSpace = Sys.f32Max(0.0, stretchWidth - finalSize.width);
-            final autoMarginCount = (itemMargin.left == null ? 1 : 0) + (itemMargin.right == null ? 1 : 0);
+            final autoMarginCount = (itemMargin.left.isNone() ? 1 : 0) + (itemMargin.right.isNone() ? 1 : 0);
             final xAxisAutoMarginSize = autoMarginCount > 0 ? freeXSpace / autoMarginCount : 0.0;
             var resolvedMargin = new Rect(
                 itemMargin.left.unwrapOr(xAxisAutoMarginSize),
@@ -957,13 +962,13 @@ class BlockLayout {
             );
 
             // Resolve item inset
-            final insetPercentageBasis = new SizeOf<Null<Float>>(containerInnerWidth, containerPercentageResolutionHeight);
+            final insetPercentageBasis = new SizeOpt(OptionalFloat.some(containerInnerWidth), containerPercentageResolutionHeight);
             final inset = item.inset.maybeResolveBySize(insetPercentageBasis);
             var insetOffsetX = 0.0;
             var insetOffsetY = 0.0;
             if (item.position == Relative) {
-                final negRight:Null<Float> = inset.right != null ? -(inset.right : Float) : null;
-                final negBottom:Null<Float> = inset.bottom != null ? -(inset.bottom : Float) : null;
+                final negRight:OptionalFloat = inset.right.isSome() ? OptionalFloat.some(-inset.right.unwrap()) : OptionalFloat.NONE;
+                final negBottom:OptionalFloat = inset.bottom.isSome() ? OptionalFloat.some(-inset.bottom.unwrap()) : OptionalFloat.NONE;
                 insetOffsetX = direction.isRtl() ? negRight.or(inset.left).unwrapOr(0.0) : inset.left.or(negRight).unwrapOr(0.0);
                 insetOffsetY = inset.top.or(negBottom).unwrapOr(0.0);
             }
@@ -978,8 +983,8 @@ class BlockLayout {
             // the bottom of the relevant floats. When clearance is introduced the item's border edge is
             // placed at `max(float bottom, hypothetical position)`.
             var hasClearance = false;
-            if (item.isInSameBfc && clearThreshold != null) {
-                final threshold:Float = clearThreshold;
+            if (item.isInSameBfc && clearThreshold.isSome()) {
+                final threshold:Float = clearThreshold.unwrap();
                 // The hypothetical position always includes the item's collapsed top margin set, even
                 // when those margins collapse with the container's own top margin.
                 final hypotheticalY = committedYOffset + activeCollapsibleMarginSet.collapseWithSet(topMarginSet).resolve();
@@ -1046,7 +1051,7 @@ class BlockLayout {
             // Apply alignment. `justify-self` aligns the item's margin box within its alignment
             // container and takes precedence over legacy `text-align`, but auto margins (which have
             // already absorbed the free space) take precedence over `justify-self`.
-            final hasAutoXMargin = itemMargin.left == null || itemMargin.right == null;
+            final hasAutoXMargin = itemMargin.left.isNone() || itemMargin.right.isNone();
             final itemOuterWidth = itemLayout.size.width + resolvedMargin.horizontalAxisSum();
             if (hasNonStretchJustifySelf && !hasAutoXMargin) {
                 // The alignment container is the containing block, except that a BFC-establishing
@@ -1097,24 +1102,24 @@ class BlockLayout {
             // Scroll containers' baselines are determined from their content as if scrolled to the
             // initial position, but are additionally clamped to their border box. A scroll container
             // with no baseline synthesizes one from its border-box bottom edge.
-            if (firstBaseline == null) {
-                var childBaseline:Null<Float>;
+            if (firstBaseline.isNone()) {
+                var childBaseline:OptionalFloat;
                 if (item.overflow.y.isScrollContainer()) {
                     final b = itemLayout.baselines.first;
-                    childBaseline = Sys.f32Max(Sys.f32Min(b != null ? (b : Float) : itemLayout.size.height, itemLayout.size.height), 0.0);
+                    childBaseline = OptionalFloat.some(Sys.f32Max(Sys.f32Min(b.isSome() ? b.unwrap() : itemLayout.size.height, itemLayout.size.height), 0.0));
                 }
                 else {
                     childBaseline = itemLayout.baselines.first;
                 }
-                firstBaseline = childBaseline != null ? locationY + (childBaseline : Float) : null;
+                firstBaseline = childBaseline.isSome() ? OptionalFloat.some(locationY + childBaseline.unwrap()) : OptionalFloat.NONE;
             }
 
             // Used auto margins include float-avoidance offsets, unlike the alignment margins above.
             if (itemAvoidsFloats) {
-                if (itemMargin.left == null) {
+                if (itemMargin.left.isNone()) {
                     resolvedMargin = resolvedMargin.withLeft(resolvedMargin.left + floatAvoidingPositionX - resolvedContentBoxInset.left);
                 }
-                if (itemMargin.right == null) {
+                if (itemMargin.right.isNone()) {
                     resolvedMargin = resolvedMargin.withRight(resolvedMargin.right + containerOuterWidth - resolvedContentBoxInset.right - floatAvoidingPositionX - floatAvoidingWidth);
                 }
             }

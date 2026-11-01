@@ -27,6 +27,10 @@ import taffy.tree.NodeId;
 import taffy.tree.OofCandidates;
 import taffy.util.MaybeMath;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.util.Resolve;
@@ -147,8 +151,8 @@ class GridAlignment {
         final insetHorizontalEnd = style.inset.right.resolveToOption(containingBlockSize.width);
         final insetVerticalStart = style.inset.top.resolveToOption(containingBlockSize.height);
         final insetVerticalEnd = style.inset.bottom.resolveToOption(containingBlockSize.height);
-        final padding = style.padding.resolveOrZero(containingBlockSize.width);
-        final border = style.border.resolveOrZero(containingBlockSize.width);
+        final padding = style.padding.resolveOrZero(OptionalFloat.some(containingBlockSize.width));
+        final border = style.border.resolveOrZero(OptionalFloat.some(containingBlockSize.width));
         final paddingBorderSize = padding.add(border).sumAxes();
 
         final boxSizingAdjustment = style.boxSizing == ContentBox ? paddingBorderSize : Size.ZERO;
@@ -170,13 +174,13 @@ class GridAlignment {
         // See: https://www.w3.org/TR/css-grid-1/#grid-item-sizing
         final horizontalAlignment = switch justifySelf.keyword {
             case Normal:
-                (inherentSize.width != null || sizeStyle.width.isSizingKeyword() || isReplaced) ? AlignItems.START : AlignItems.STRETCH;
+                (inherentSize.width.isSome() || sizeStyle.width.isSizingKeyword() || isReplaced) ? AlignItems.START : AlignItems.STRETCH;
             case _:
                 justifySelf;
         }
         final verticalAlignment = switch alignSelf.keyword {
             case Normal:
-                (inherentSize.height != null || sizeStyle.height.isSizingKeyword() || aspectRatio != null || isReplaced) ? AlignItems.START : AlignItems.STRETCH;
+                (inherentSize.height.isSome() || sizeStyle.height.isSizingKeyword() || aspectRatio.isSome() || isReplaced) ? AlignItems.START : AlignItems.STRETCH;
             case _:
                 alignSelf;
         }
@@ -198,86 +202,86 @@ class GridAlignment {
         // A size that is a sizing keyword (min-content, max-content, fit-content,
         // fit-content(...), stretch) either resolves to an exact size or is resolved
         // by measuring the item under the corresponding available space constraint
-        final keywordWidth = inherentSize.width == null ? SizingKeyword.resolveSizingKeyword(sizeStyle.width, gridAreaMinusItemMarginsSize.width,
-            containingBlockSize.width) : null;
-        final keywordHeight = inherentSize.height == null ? SizingKeyword.resolveSizingKeyword(sizeStyle.height, gridAreaMinusItemMarginsSize.height,
-            containingBlockSize.height) : null;
+        final keywordWidth = inherentSize.width.isNone() ? SizingKeyword.resolveSizingKeyword(sizeStyle.width, OptionalFloat.some(gridAreaMinusItemMarginsSize.width),
+            OptionalFloat.some(containingBlockSize.width)) : null;
+        final keywordHeight = inherentSize.height.isNone() ? SizingKeyword.resolveSizingKeyword(sizeStyle.height, OptionalFloat.some(gridAreaMinusItemMarginsSize.height),
+            OptionalFloat.some(containingBlockSize.height)) : null;
 
         // If both axes need to be measured then resolve them with a single measure call
-        var keywordMeasuredWidth:Null<Float> = null;
-        var keywordMeasuredHeight:Null<Float> = null;
+        var keywordMeasuredWidth:OptionalFloat = OptionalFloat.NONE;
+        var keywordMeasuredHeight:OptionalFloat = OptionalFloat.NONE;
         if (keywordWidth != null && keywordHeight != null && !position.isOutOfFlow()) {
             switch [keywordWidth, keywordHeight] {
                 case [Measure(availableWidth), Measure(availableHeight)]:
-                    final measured = LayoutPartialTreeExt.measureChildSizeBoth(tree, node, OptionSizeTools.NONE, containingBlockOptions,
-                        new SizeOf<AvailableSpace>(availableWidth, availableHeight), InherentSize, FALSE_LINE);
-                    keywordMeasuredWidth = measured.width;
-                    keywordMeasuredHeight = measured.height;
+                    final measured = LayoutPartialTreeExt.measureChildSizeBoth(tree, node, SizeOpt.NONE, containingBlockOptions,
+                        new SizeAvail(availableWidth, availableHeight), InherentSize, FALSE_LINE);
+                    keywordMeasuredWidth = OptionalFloat.some(measured.width);
+                    keywordMeasuredHeight = OptionalFloat.some(measured.height);
                 case _:
             }
         }
 
         // If node is absolutely positioned and width is not set explicitly, then deduce it
         // from left, right and container_content_box if both are set.
-        var width:Null<Float> = inherentSize.width;
-        if (width == null) {
+        var width:OptionalFloat = inherentSize.width;
+        if (width.isNone()) {
             // Apply width derived from both the left and right properties of an absolutely
             // positioned element being set
-            if (position.isOutOfFlow() && insetHorizontalStart != null && insetHorizontalEnd != null) {
-                width = Sys.f32Max(gridAreaMinusItemMarginsSize.width - insetHorizontalStart - insetHorizontalEnd, 0.0);
+            if (position.isOutOfFlow() && insetHorizontalStart.isSome() && insetHorizontalEnd.isSome()) {
+                width = OptionalFloat.some(Sys.f32Max(gridAreaMinusItemMarginsSize.width - insetHorizontalStart.unwrap() - insetHorizontalEnd.unwrap(), 0.0));
             }
             else if (keywordWidth != null) {
                 width = switch keywordWidth {
-                    case Exact(w): w;
+                    case Exact(w): OptionalFloat.some(w);
                     case Measure(availableWidth):
-                        keywordMeasuredWidth != null ? keywordMeasuredWidth : LayoutPartialTreeExt.measureChildSize(tree, node, OptionSizeTools.NONE,
-                            containingBlockOptions, new SizeOf<AvailableSpace>(availableWidth, Definite(gridAreaMinusItemMarginsSize.height)),
-                            InherentSize, Horizontal, FALSE_LINE);
+                        keywordMeasuredWidth.isSome() ? keywordMeasuredWidth : OptionalFloat.some(LayoutPartialTreeExt.measureChildSize(tree, node, SizeOpt.NONE,
+                            containingBlockOptions, new SizeAvail(availableWidth, Definite(gridAreaMinusItemMarginsSize.height)),
+                            InherentSize, Horizontal, FALSE_LINE));
                 }
             }
             // Apply width based on stretch alignment if:
             //  - Alignment style is "stretch"
             //  - The node is not absolutely positioned
             //  - The node does not have auto margins in this axis.
-            else if (marginLeft != null && marginRight != null && horizontalAlignment == AlignItems.STRETCH && !position.isOutOfFlow()) {
-                width = gridAreaMinusItemMarginsSize.width;
+            else if (marginLeft.isSome() && marginRight.isSome() && horizontalAlignment == AlignItems.STRETCH && !position.isOutOfFlow()) {
+                width = OptionalFloat.some(gridAreaMinusItemMarginsSize.width);
             }
         }
 
         // Reapply aspect ratio after stretch and absolute position width adjustments
-        final s1 = new SizeOf<Null<Float>>(width, inherentSize.height).maybeApplyAspectRatio(aspectRatio);
+        final s1 = new SizeOpt(width, inherentSize.height).maybeApplyAspectRatio(aspectRatio);
         width = s1.width;
-        var height:Null<Float> = s1.height;
+        var height:OptionalFloat = s1.height;
 
-        if (height == null) {
-            if (position.isOutOfFlow() && insetVerticalStart != null && insetVerticalEnd != null) {
-                height = Sys.f32Max(gridAreaMinusItemMarginsSize.height - insetVerticalStart - insetVerticalEnd, 0.0);
+        if (height.isNone()) {
+            if (position.isOutOfFlow() && insetVerticalStart.isSome() && insetVerticalEnd.isSome()) {
+                height = OptionalFloat.some(Sys.f32Max(gridAreaMinusItemMarginsSize.height - insetVerticalStart.unwrap() - insetVerticalEnd.unwrap(), 0.0));
             }
             else if (keywordHeight != null) {
                 height = switch keywordHeight {
-                    case Exact(h): h;
+                    case Exact(h): OptionalFloat.some(h);
                     case Measure(availableHeight):
-                        keywordMeasuredHeight != null ? keywordMeasuredHeight : LayoutPartialTreeExt.measureChildSize(tree, node,
-                            new SizeOf<Null<Float>>(width, null), containingBlockOptions,
-                            new SizeOf<AvailableSpace>(width != null ? Definite(width) : Definite(gridAreaMinusItemMarginsSize.width), availableHeight),
-                            InherentSize, Vertical, FALSE_LINE);
+                        keywordMeasuredHeight.isSome() ? keywordMeasuredHeight : OptionalFloat.some(LayoutPartialTreeExt.measureChildSize(tree, node,
+                            new SizeOpt(width, OptionalFloat.NONE), containingBlockOptions,
+                            new SizeAvail(width.isSome() ? Definite(width.unwrap()) : Definite(gridAreaMinusItemMarginsSize.width), availableHeight),
+                            InherentSize, Vertical, FALSE_LINE));
                 }
             }
             // Apply height based on stretch alignment if:
             //  - Alignment style is "stretch"
             //  - The node is not absolutely positioned
             //  - The node does not have auto margins in this axis.
-            else if (marginTop != null && marginBottom != null && verticalAlignment == AlignItems.STRETCH && !position.isOutOfFlow()) {
-                height = gridAreaMinusItemMarginsSize.height;
+            else if (marginTop.isSome() && marginBottom.isSome() && verticalAlignment == AlignItems.STRETCH && !position.isOutOfFlow()) {
+                height = OptionalFloat.some(gridAreaMinusItemMarginsSize.height);
             }
         }
         // Reapply aspect ratio after stretch and absolute position height adjustments
         // Clamp size by min and max width/height
-        final clamped = new SizeOf<Null<Float>>(width, height).maybeApplyAspectRatio(aspectRatio).maybeClamp(minSize, maxSize);
+        final clamped = new SizeOpt(width, height).maybeApplyAspectRatio(aspectRatio).maybeClamp(minSize, maxSize);
 
         // Layout node
-        final availableSpace = new SizeOf<AvailableSpace>(Definite(gridAreaMinusItemMarginsSize.width), Definite(gridAreaMinusItemMarginsSize.height));
-        final size = if (position.isOutOfFlow() && (clamped.width == null || clamped.height == null)) {
+        final availableSpace = new SizeAvail(Definite(gridAreaMinusItemMarginsSize.width), Definite(gridAreaMinusItemMarginsSize.height));
+        final size = if (position.isOutOfFlow() && (clamped.width.isNone() || clamped.height.isNone())) {
             LayoutPartialTreeExt.measureChildSizeBoth(tree, node, clamped, containingBlockOptions, availableSpace, InherentSize, FALSE_LINE).toOptions();
         }
         else {
@@ -340,20 +344,20 @@ class GridAlignment {
      * Returns the start position. The resolved margins are stored in `resultMarginStart` / `resultMarginEnd`.
      */
     public static function alignItemWithinArea(gridAreaStart:Float, gridAreaEnd:Float, alignmentStyle:AlignItems, resolvedSize:Float,
-            position:Position, insetStart:Null<Float>, insetEnd:Null<Float>, marginStart:Null<Float>, marginEnd:Null<Float>, baselineShim:Float,
+            position:Position, insetStart:OptionalFloat, insetEnd:OptionalFloat, marginStart:OptionalFloat, marginEnd:OptionalFloat, baselineShim:Float,
             direction:Direction):Float {
         // Calculate grid area dimension in the axis
-        final nonAutoMarginStart = (marginStart != null ? (marginStart : Float) : 0.0) + baselineShim;
-        final nonAutoMarginEnd = marginEnd != null ? (marginEnd : Float) : 0.0;
+        final nonAutoMarginStart = (marginStart.isSome() ? marginStart.unwrap() : 0.0) + baselineShim;
+        final nonAutoMarginEnd = marginEnd.isSome() ? marginEnd.unwrap() : 0.0;
         final nonAutoMarginSum = nonAutoMarginStart + nonAutoMarginEnd;
         final gridAreaSize = Sys.f32Max(gridAreaEnd - gridAreaStart, 0.0);
         final freeSpace = Sys.f32Max(gridAreaSize - resolvedSize - nonAutoMarginSum, 0.0);
 
         // Expand auto margins to fill available space
-        final autoMarginCount = (marginStart == null ? 1 : 0) + (marginEnd == null ? 1 : 0);
+        final autoMarginCount = (marginStart.isNone() ? 1 : 0) + (marginEnd.isNone() ? 1 : 0);
         final autoMarginSize = autoMarginCount > 0 ? freeSpace / autoMarginCount : 0.0;
-        final resolvedMarginStart = (marginStart != null ? (marginStart : Float) : autoMarginSize) + baselineShim;
-        final resolvedMarginEnd = marginEnd != null ? (marginEnd : Float) : autoMarginSize;
+        final resolvedMarginStart = (marginStart.isSome() ? marginStart.unwrap() : autoMarginSize) + baselineShim;
+        final resolvedMarginEnd = marginEnd.isSome() ? marginEnd.unwrap() : autoMarginSize;
 
         final overflows = resolvedSize + nonAutoMarginSum > gridAreaSize;
         final alignmentKeyword = Alignment.resolveSelfAlignmentSafety(alignmentStyle, overflows);
@@ -374,14 +378,14 @@ class GridAlignment {
         }
 
         final offsetWithinArea = if (position.isOutOfFlow()) {
-            if (insetStart != null && insetEnd != null) {
-                direction.isRtl() ? gridAreaSize - (insetEnd : Float) - resolvedSize - nonAutoMarginEnd : (insetStart : Float) + nonAutoMarginStart;
+            if (insetStart.isSome() && insetEnd.isSome()) {
+                direction.isRtl() ? gridAreaSize - insetEnd.unwrap() - resolvedSize - nonAutoMarginEnd : insetStart.unwrap() + nonAutoMarginStart;
             }
-            else if (insetStart != null) {
-                (insetStart : Float) + nonAutoMarginStart;
+            else if (insetStart.isSome()) {
+                insetStart.unwrap() + nonAutoMarginStart;
             }
-            else if (insetEnd != null) {
-                gridAreaSize - (insetEnd : Float) - resolvedSize - nonAutoMarginEnd;
+            else if (insetEnd.isSome()) {
+                gridAreaSize - insetEnd.unwrap() - resolvedSize - nonAutoMarginEnd;
             }
             else {
                 alignmentBasedOffset;
@@ -393,13 +397,13 @@ class GridAlignment {
 
         var start = gridAreaStart + offsetWithinArea;
         if (position == Relative) {
-            final relativeInset:Null<Float> = if (direction.isRtl()) {
-                insetEnd != null ? -(insetEnd : Float) : insetStart;
+            final relativeInset:OptionalFloat = if (direction.isRtl()) {
+                insetEnd.isSome() ? OptionalFloat.some(-insetEnd.unwrap()) : insetStart;
             }
             else {
-                insetStart != null ? insetStart : (insetEnd != null ? -(insetEnd : Float) : null);
+                insetStart.isSome() ? insetStart : (insetEnd.isSome() ? OptionalFloat.some(-insetEnd.unwrap()) : OptionalFloat.NONE);
             }
-            start += relativeInset != null ? (relativeInset : Float) : 0.0;
+            start += relativeInset.isSome() ? relativeInset.unwrap() : 0.0;
         }
 
         resultMarginStart = resolvedMarginStart;

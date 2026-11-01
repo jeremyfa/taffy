@@ -28,6 +28,10 @@ import taffy.tree.NodeId;
 import taffy.tree.OofCandidates;
 import taffy.util.MaybeMath;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
+import taffy.style.AvailableSpace.Definite;
 
 using taffy.geometry.SizeOf;
 using taffy.util.Resolve;
@@ -85,7 +89,7 @@ class GridItem {
     public final maxSize:SizeOf<LengthPercentageAuto>;
 
     /** The item's aspect_ratio style */
-    public final aspectRatio:Null<Float>;
+    public final aspectRatio:OptionalFloat;
 
     /** The item's padding style */
     public final padding:RectOf<LengthPercentage>;
@@ -103,7 +107,7 @@ class GridItem {
     public final justifySelf:AlignItems;
 
     /** The items first baseline (horizontal) */
-    public var baseline:Null<Float> = null;
+    public var baseline:OptionalFloat = OptionalFloat.NONE;
 
     /**
      * Shim for baseline alignment that acts like an extra top margin
@@ -138,34 +142,34 @@ class GridItem {
     // Caches for intrinsic size computation. These caches are only valid for a single run of the track-sizing algorithm.
 
     /** Cache for the known_dimensions input to intrinsic sizing computation */
-    public var gridAreaSizeCache:Null<SizeOf<Null<Float>>> = null;
+    public var gridAreaSizeCache:Null<SizeOpt> = null;
 
     /**
      * Cache for the known_dimensions passed to the child when computing its intrinsic contributions, stored along with
      * the grid area size it was computed for (null if empty). Must be cleared whenever `baselineShim` changes.
      */
-    public var knownDimensionsCacheGridAreaSize:Null<SizeOf<Null<Float>>> = null;
+    public var knownDimensionsCacheGridAreaSize:Null<SizeOpt> = null;
 
     /** The cached known dimensions (see `knownDimensionsCacheGridAreaSize`) */
-    public var knownDimensionsCacheValue:Null<SizeOf<Null<Float>>> = null;
+    public var knownDimensionsCacheValue:Null<SizeOpt> = null;
 
     /** Cache for the min-content size (width) */
-    public var minContentContributionCacheWidth:Null<Float> = null;
+    public var minContentContributionCacheWidth:OptionalFloat = OptionalFloat.NONE;
 
     /** Cache for the min-content size (height) */
-    public var minContentContributionCacheHeight:Null<Float> = null;
+    public var minContentContributionCacheHeight:OptionalFloat = OptionalFloat.NONE;
 
     /** Cache for the minimum contribution (width) */
-    public var minimumContributionCacheWidth:Null<Float> = null;
+    public var minimumContributionCacheWidth:OptionalFloat = OptionalFloat.NONE;
 
     /** Cache for the minimum contribution (height) */
-    public var minimumContributionCacheHeight:Null<Float> = null;
+    public var minimumContributionCacheHeight:OptionalFloat = OptionalFloat.NONE;
 
     /** Cache for the max-content size (width) */
-    public var maxContentContributionCacheWidth:Null<Float> = null;
+    public var maxContentContributionCacheWidth:OptionalFloat = OptionalFloat.NONE;
 
     /** Cache for the max-content size (height) */
-    public var maxContentContributionCacheHeight:Null<Float> = null;
+    public var maxContentContributionCacheHeight:OptionalFloat = OptionalFloat.NONE;
 
     /** Final y position. Used to compute baseline alignment for the container. */
     public var yPosition:Float = 0.0;
@@ -270,37 +274,37 @@ class GridItem {
      * For an item spanning multiple tracks, the upper limit used to calculate its limited min-/max-content contribution is the
      * sum of the fixed max track sizing functions of any tracks it spans, and is applied if it only spans such tracks.
      */
-    public function spannedTrackLimit(axis:AbstractAxis, axisTracks:Array<GridTrack>, axisParentSize:Null<Float>):Null<Float> {
+    public function spannedTrackLimit(axis:AbstractAxis, axisTracks:Array<GridTrack>, axisParentSize:OptionalFloat):OptionalFloat {
         var limit = 0.0;
         for (i in trackRangeStart(axis)...trackRangeEnd(axis)) {
             final value = axisTracks[i].maxTrackSizingFunction.definiteLimit(axisParentSize);
-            if (value == null)
-                return null;
-            limit += value;
+            if (value.isNone())
+                return OptionalFloat.NONE;
+            limit += value.unwrap();
         }
-        return limit;
+        return OptionalFloat.some(limit);
     }
 
     /**
      * Similar to the spannedTrackLimit, but excludes FitContent arguments from the limit.
      * Used to clamp the automatic minimum contributions of an item
      */
-    public function spannedFixedTrackLimit(axis:AbstractAxis, axisTracks:Array<GridTrack>, axisParentSize:Null<Float>):Null<Float> {
+    public function spannedFixedTrackLimit(axis:AbstractAxis, axisTracks:Array<GridTrack>, axisParentSize:OptionalFloat):OptionalFloat {
         var limit = 0.0;
         for (i in trackRangeStart(axis)...trackRangeEnd(axis)) {
             final value = axisTracks[i].maxTrackSizingFunction.definiteValue(axisParentSize);
-            if (value == null)
-                return null;
-            limit += value;
+            if (value.isNone())
+                return OptionalFloat.NONE;
+            limit += value.unwrap();
         }
-        return limit;
+        return OptionalFloat.some(limit);
     }
 
     /**
      * Retrieve the known_dimensions for the given grid area size from the cache or compute them.
      * The min-content and max-content contributions of an item are both computed from the same known_dimensions.
      */
-    inline function knownDimensionsCached(tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>):SizeOf<Null<Float>> {
+    inline function knownDimensionsCached(tree:LayoutPartialTree, gridAreaSize:SizeOpt):SizeOpt {
         final cachedSize = knownDimensionsCacheGridAreaSize;
         return if (cachedSize != null && cachedSize.equals(gridAreaSize)) {
             knownDimensionsCacheValue;
@@ -333,7 +337,7 @@ class GridItem {
      * The key thing that is being done here is applying stretch alignment, which is necessary to
      * allow percentage sizes further down the tree to resolve properly in some cases
      */
-    function knownDimensions(tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>):SizeOf<Null<Float>> {
+    function knownDimensions(tree:LayoutPartialTree, gridAreaSize:SizeOpt):SizeOpt {
         final margins = marginsAxisSumsWithBaselineShims(gridAreaSize.width, tree);
 
         final aspectRatio = this.aspectRatio;
@@ -360,13 +364,13 @@ class GridItem {
 
         // If node is absolutely positioned and width is not set explicitly, then deduce it
         // from left, right and container_content_box if both are set.
-        var width:Null<Float> = inherentSize.width;
-        if (width == null) {
+        var width:OptionalFloat = inherentSize.width;
+        if (width.isNone()) {
             // A width that is a sizing keyword is not auto, so it does not stretch. The stretch
             // keyword resolves to an exact width; the others resolve during content measurement.
             if (size.width.isSizingKeyword()) {
                 switch SizingKeyword.resolveSizingKeyword(size.width, gridAreaMinusItemMarginsSize.width, gridAreaSize.width) {
-                    case Exact(w): width = w;
+                    case Exact(w): width = OptionalFloat.some(w);
                     case _:
                 }
             }
@@ -382,16 +386,16 @@ class GridItem {
             }
         }
         // Reapply aspect ratio after stretch and absolute position width adjustments
-        final s1 = new SizeOf<Null<Float>>(width, inherentSize.height).maybeApplyAspectRatio(aspectRatio);
+        final s1 = new SizeOpt(width, inherentSize.height).maybeApplyAspectRatio(aspectRatio);
         width = s1.width;
-        var height:Null<Float> = s1.height;
+        var height:OptionalFloat = s1.height;
 
-        if (height == null) {
+        if (height.isNone()) {
             // A height that is a sizing keyword is not auto, so it does not stretch. The stretch
             // keyword resolves to an exact height; the others resolve during content measurement.
             if (size.height.isSizingKeyword()) {
                 switch SizingKeyword.resolveSizingKeyword(size.height, gridAreaMinusItemMarginsSize.height, gridAreaSize.height) {
-                    case Exact(h): height = h;
+                    case Exact(h): height = OptionalFloat.some(h);
                     case _:
                 }
             }
@@ -404,28 +408,28 @@ class GridItem {
             }
         }
         // Reapply aspect ratio after stretch and absolute position height adjustments
-        final s2 = new SizeOf<Null<Float>>(width, height).maybeApplyAspectRatio(aspectRatio);
+        final s2 = new SizeOpt(width, height).maybeApplyAspectRatio(aspectRatio);
 
         // Clamp size by min and max width/height
         return s2.maybeClamp(minSize, maxSize);
     }
 
     /** Sum the track size estimates of the passed tracks (null if any estimate is null) */
-    static function sumTrackSizeEstimates(tracks:Array<GridTrack>, start:Int, end:Int, estimate:Int, parentSize:Null<Float>):Null<Float> {
+    static function sumTrackSizeEstimates(tracks:Array<GridTrack>, start:Int, end:Int, estimate:Int, parentSize:OptionalFloat):OptionalFloat {
         var sum = 0.0;
         for (i in start...end) {
             final track = tracks[i];
             final value = trackSizeEstimate(track, estimate, parentSize);
-            if (value == null)
-                return null;
-            sum += (value : Float) + track.contentAlignmentAdjustment;
+            if (value.isNone())
+                return OptionalFloat.NONE;
+            sum += value.unwrap() + track.contentAlignmentAdjustment;
         }
-        return sum;
+        return OptionalFloat.some(sum);
     }
 
     /** Compute a track size estimate (`ESTIMATE_MAX_TRACK_DEFINITE_VALUE` or `ESTIMATE_BASE_SIZE`) */
-    public static inline function trackSizeEstimate(track:GridTrack, estimate:Int, parentSize:Null<Float>):Null<Float> {
-        return estimate == ESTIMATE_BASE_SIZE ? track.baseSize : track.maxTrackSizingFunction.definiteValue(parentSize);
+    public static inline function trackSizeEstimate(track:GridTrack, estimate:Int, parentSize:OptionalFloat):OptionalFloat {
+        return estimate == ESTIMATE_BASE_SIZE ? OptionalFloat.some(track.baseSize) : track.maxTrackSizingFunction.definiteValue(parentSize);
     }
 
     /**
@@ -441,26 +445,26 @@ class GridItem {
      * https://www.w3.org/TR/css-grid-1/#algo-overview
      */
     public function gridAreaSize(axis:AbstractAxis, axisTracks:Array<GridTrack>, otherAxisTracks:Array<GridTrack>,
-            availableSpace:SizeOf<Null<Float>>, estimate:Int):SizeOf<Null<Float>> {
-        var axisSize:Null<Float> = 0.0;
+            availableSpace:SizeOpt, estimate:Int):SizeOpt {
+        var axisSize:OptionalFloat = OptionalFloat.some(0.0);
         final axisAvailable = availableSpace.get(axis);
         for (i in trackRangeStart(axis)...trackRangeEnd(axis)) {
             final track = axisTracks[i];
             final minSize = track.minTrackSizingFunction.definiteValue(axisAvailable);
-            if (minSize == null) {
-                axisSize = null;
+            if (minSize.isNone()) {
+                axisSize = OptionalFloat.NONE;
                 break;
             }
             final maxSize = track.maxTrackSizingFunction.definiteValue(axisAvailable);
-            if (maxSize == null) {
-                axisSize = null;
+            if (maxSize.isNone()) {
+                axisSize = OptionalFloat.NONE;
                 break;
             }
-            if ((minSize : Float) == (maxSize : Float)) {
-                axisSize = (axisSize : Float) + track.baseSize;
+            if (minSize.unwrap() == maxSize.unwrap()) {
+                axisSize = OptionalFloat.some(axisSize.unwrap() + track.baseSize);
             }
             else {
-                axisSize = null;
+                axisSize = OptionalFloat.NONE;
                 break;
             }
         }
@@ -468,12 +472,12 @@ class GridItem {
         final other = axis.other();
         final otherSize = sumTrackSizeEstimates(otherAxisTracks, trackRangeStart(other), trackRangeEnd(other), estimate, availableSpace.get(other));
 
-        return axis == Inline ? new SizeOf<Null<Float>>(axisSize, otherSize) : new SizeOf<Null<Float>>(otherSize, axisSize);
+        return axis == Inline ? new SizeOpt(axisSize, otherSize) : new SizeOpt(otherSize, axisSize);
     }
 
     /** Retrieve the grid area size from the cache or compute it using the passed parameters */
     public function gridAreaSizeCached(axis:AbstractAxis, axisTracks:Array<GridTrack>, otherAxisTracks:Array<GridTrack>,
-            availableSpace:SizeOf<Null<Float>>, estimate:Int):SizeOf<Null<Float>> {
+            availableSpace:SizeOpt, estimate:Int):SizeOpt {
         final cached = gridAreaSizeCache;
         if (cached != null)
             return cached;
@@ -486,22 +490,22 @@ class GridItem {
      * Compute the item's resolved margins for size contributions. Horizontal percentage margins always resolve
      * to zero if the container size is indefinite as otherwise this would introduce a cyclic dependency.
      */
-    public inline function marginsAxisSumsWithBaselineShims(innerNodeWidth:Null<Float>, tree:LayoutPartialTree):Size {
+    public inline function marginsAxisSumsWithBaselineShims(innerNodeWidth:OptionalFloat, tree:LayoutPartialTree):Size {
         return new Size(
-            margin.left.resolveOrZero(0.0) + margin.right.resolveOrZero(0.0),
+            margin.left.resolveOrZero(OptionalFloat.some(0.0)) + margin.right.resolveOrZero(OptionalFloat.some(0.0)),
             margin.top.resolveOrZero(innerNodeWidth) + baselineShim + margin.bottom.resolveOrZero(innerNodeWidth)
         );
     }
 
     /** Compute the item's min content contribution from the provided parameters */
-    public function minContentContribution(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>,
-            availableSpace:SizeOf<Null<Float>>):Float {
+    public function minContentContribution(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOpt,
+            availableSpace:SizeOpt):Float {
         final knownDimensions = knownDimensionsCached(tree, gridAreaSize);
         // If the item's size in the axis being measured is already known then that size is its contribution,
         // and we can avoid calling into the child entirely.
         final known = knownDimensions.get(axis);
-        if (known != null)
-            return known;
+        if (known.isSome())
+            return known.unwrap();
         // The child sees the grid area as its containing block during intrinsic measurement, so
         // percentage box properties resolve against the grid area when that size is definite.
         // Spec:
@@ -513,9 +517,9 @@ class GridItem {
             node,
             knownDimensions,
             gridAreaSize,
-            keywordAdjustedAvailableSpace(gridAreaSize, new SizeOf<AvailableSpace>(
-                space.width != null ? Definite(space.width) : MinContent,
-                space.height != null ? Definite(space.height) : MinContent
+            keywordAdjustedAvailableSpace(gridAreaSize, new SizeAvail(
+                space.width.isSome() ? Definite(space.width.unwrap()) : MinContent,
+                space.height.isSome() ? Definite(space.height.unwrap()) : MinContent
             ), tree),
             InherentSize,
             axis.asAbsNaive(),
@@ -524,31 +528,31 @@ class GridItem {
     }
 
     /** Retrieve the item's min content contribution from the cache or compute it using the provided parameters */
-    public inline function minContentContributionCached(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>,
-            availableSpace:SizeOf<Null<Float>>):Float {
+    public inline function minContentContributionCached(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOpt,
+            availableSpace:SizeOpt):Float {
         final cached = axis == Inline ? minContentContributionCacheWidth : minContentContributionCacheHeight;
-        return if (cached != null) {
-            cached;
+        return if (cached.isSome()) {
+            cached.unwrap();
         }
         else {
             final size = minContentContribution(axis, tree, gridAreaSize, availableSpace);
             if (axis == Inline)
-                minContentContributionCacheWidth = size;
+                minContentContributionCacheWidth = OptionalFloat.some(size);
             else
-                minContentContributionCacheHeight = size;
+                minContentContributionCacheHeight = OptionalFloat.some(size);
             size;
         }
     }
 
     /** Compute the item's max content contribution from the provided parameters */
-    public function maxContentContribution(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>,
-            availableSpace:SizeOf<Null<Float>>):Float {
+    public function maxContentContribution(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOpt,
+            availableSpace:SizeOpt):Float {
         final knownDimensions = knownDimensionsCached(tree, gridAreaSize);
         // If the item's size in the axis being measured is already known then that size is its contribution,
         // and we can avoid calling into the child entirely.
         final known = knownDimensions.get(axis);
-        if (known != null)
-            return known;
+        if (known.isSome())
+            return known.unwrap();
         // See the min-content path above. Max-content measurement uses the same containing-block
         // basis so percentage-dependent item geometry is measured from the grid area rather than
         // from the container.
@@ -558,9 +562,9 @@ class GridItem {
             node,
             knownDimensions,
             gridAreaSize,
-            keywordAdjustedAvailableSpace(gridAreaSize, new SizeOf<AvailableSpace>(
-                space.width != null ? Definite(space.width) : MaxContent,
-                space.height != null ? Definite(space.height) : MaxContent
+            keywordAdjustedAvailableSpace(gridAreaSize, new SizeAvail(
+                space.width.isSome() ? Definite(space.width.unwrap()) : MaxContent,
+                space.height.isSome() ? Definite(space.height.unwrap()) : MaxContent
             ), tree),
             InherentSize,
             axis.asAbsNaive(),
@@ -574,16 +578,16 @@ class GridItem {
      * As when the item is laid out into its final position, margins resolve against the width
      * of the grid area and `auto` margins are treated as zero.
      */
-    inline function availableSpaceMinusMargins(gridAreaSize:SizeOf<Null<Float>>, availableSpace:SizeOf<Null<Float>>,
-            tree:LayoutPartialTree):SizeOf<Null<Float>> {
-        return if (availableSpace.width == null && availableSpace.height == null) {
+    inline function availableSpaceMinusMargins(gridAreaSize:SizeOpt, availableSpace:SizeOpt,
+            tree:LayoutPartialTree):SizeOpt {
+        return if (availableSpace.width.isNone() && availableSpace.height.isNone()) {
             availableSpace;
         }
         else {
             final margin = this.margin.resolveOrZero(gridAreaSize.width);
-            new SizeOf<Null<Float>>(
-                availableSpace.width != null ? Sys.f32Max((availableSpace.width : Float) - margin.horizontalAxisSum(), 0.0) : null,
-                availableSpace.height != null ? Sys.f32Max((availableSpace.height : Float) - margin.verticalAxisSum() - baselineShim, 0.0) : null
+            new SizeOpt(
+                availableSpace.width.isSome() ? OptionalFloat.some(Sys.f32Max(availableSpace.width.unwrap() - margin.horizontalAxisSum(), 0.0)) : OptionalFloat.NONE,
+                availableSpace.height.isSome() ? OptionalFloat.some(Sys.f32Max(availableSpace.height.unwrap() - margin.verticalAxisSum() - baselineShim, 0.0)) : OptionalFloat.NONE
             );
         }
     }
@@ -593,8 +597,8 @@ class GridItem {
      * measures the item under a specific available space constraint
      * (min-content, max-content, fit-content, fit-content(...))
      */
-    function keywordAdjustedAvailableSpace(gridAreaSize:SizeOf<Null<Float>>, availableSpace:SizeOf<AvailableSpace>,
-            tree:LayoutPartialTree):SizeOf<AvailableSpace> {
+    function keywordAdjustedAvailableSpace(gridAreaSize:SizeOpt, availableSpace:SizeAvail,
+            tree:LayoutPartialTree):SizeAvail {
         if (!size.width.isSizingKeyword() && !size.height.isSizingKeyword())
             return availableSpace;
         final margins = marginsAxisSumsWithBaselineShims(gridAreaSize.width, tree);
@@ -603,7 +607,7 @@ class GridItem {
             final sizeStyle = size.get(axis);
             if (!sizeStyle.isSizingKeyword())
                 continue;
-            final stretchSize = MaybeMath.maybeMax(MaybeMath.maybeSub(gridAreaSize.get(axis), margins.get(axis)), 0.0);
+            final stretchSize = gridAreaSize.get(axis).maybeSub(OptionalFloat.some(margins.get(axis))).maybeMax(OptionalFloat.some(0.0));
             switch SizingKeyword.resolveSizingKeyword(sizeStyle, stretchSize, gridAreaSize.get(axis)) {
                 case Measure(available):
                     adjusted = adjusted.with(axis, available);
@@ -614,18 +618,18 @@ class GridItem {
     }
 
     /** Retrieve the item's max content contribution from the cache or compute it using the provided parameters */
-    public inline function maxContentContributionCached(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOf<Null<Float>>,
-            availableSpace:SizeOf<Null<Float>>):Float {
+    public inline function maxContentContributionCached(axis:AbstractAxis, tree:LayoutPartialTree, gridAreaSize:SizeOpt,
+            availableSpace:SizeOpt):Float {
         final cached = axis == Inline ? maxContentContributionCacheWidth : maxContentContributionCacheHeight;
-        return if (cached != null) {
-            cached;
+        return if (cached.isSome()) {
+            cached.unwrap();
         }
         else {
             final size = maxContentContribution(axis, tree, gridAreaSize, availableSpace);
             if (axis == Inline)
-                maxContentContributionCacheWidth = size;
+                maxContentContributionCacheWidth = OptionalFloat.some(size);
             else
-                maxContentContributionCacheHeight = size;
+                maxContentContributionCacheHeight = OptionalFloat.some(size);
             size;
         }
     }
@@ -640,27 +644,27 @@ class GridItem {
      * Because the minimum contribution often depends on the size of the item's content, it is considered a type of intrinsic size contribution.
      * See: https://www.w3.org/TR/css-grid-1/#min-size-auto
      */
-    public function minimumContribution(tree:LayoutPartialTree, axis:AbstractAxis, axisTracks:Array<GridTrack>, gridAreaSize:SizeOf<Null<Float>>,
-            innerNodeSize:SizeOf<Null<Float>>):Float {
+    public function minimumContribution(tree:LayoutPartialTree, axis:AbstractAxis, axisTracks:Array<GridTrack>, gridAreaSize:SizeOpt,
+            innerNodeSize:SizeOpt):Float {
         final padding = this.padding.resolveOrZero(gridAreaSize.width);
         final border = this.border.resolveOrZero(gridAreaSize.width);
         final paddingBorderSize = padding.add(border).sumAxes();
         final boxSizingAdjustment = boxSizing == ContentBox ? paddingBorderSize : Size.ZERO;
 
         final preferred = size.maybeResolve(gridAreaSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment).get(axis);
-        if (preferred != null) {
+        if (preferred.isSome()) {
             // A definite preferred size is clamped by the minimum and maximum sizes. For a compressible replaced
             // element, an indefinite percentage maximum size is resolved against zero.
             final minSizeStyle = minSize.get(axis);
             final maxSizeStyle = maxSize.get(axis);
             if (minSizeStyle.isAuto() && maxSizeStyle.isAuto())
-                return preferred;
+                return preferred.unwrap();
             final basis = gridAreaSize.get(axis);
-            final maxSizeBasis:Null<Float> = isCompressibleReplaced ? (basis != null ? basis : 0.0) : basis;
+            final maxSizeBasis:OptionalFloat = isCompressibleReplaced ? (basis.isSome() ? basis : OptionalFloat.some(0.0)) : basis;
             final adjustment = boxSizingAdjustment.get(axis);
             final min = minSizeStyle.maybeResolve(basis);
             final max = maxSizeStyle.maybeResolve(maxSizeBasis);
-            return MaybeMath.maybeClampF(preferred, MaybeMath.maybeAdd(min, adjustment), MaybeMath.maybeAdd(max, adjustment));
+            return MaybeMath.maybeClampF(preferred.unwrap(), min.maybeAdd(OptionalFloat.some(adjustment)), max.maybeAdd(OptionalFloat.some(adjustment)));
         }
 
         // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,
@@ -669,17 +673,17 @@ class GridItem {
         if (sizeStyle.isSizingKeyword() && !sizeStyle.isStretch())
             return minContentContributionCached(axis, tree, gridAreaSize, gridAreaSize);
 
-        final zeroedGridAreaSize = new SizeOf<Null<Float>>(
-            gridAreaSize.width != null ? gridAreaSize.width : 0.0,
-            gridAreaSize.height != null ? gridAreaSize.height : 0.0
+        final zeroedGridAreaSize = new SizeOpt(
+            gridAreaSize.width.isSome() ? gridAreaSize.width : OptionalFloat.some(0.0),
+            gridAreaSize.height.isSome() ? gridAreaSize.height : OptionalFloat.some(0.0)
         );
         final resolvedMinSize = minSize.maybeResolve(zeroedGridAreaSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment).get(axis);
-        if (resolvedMinSize != null)
-            return resolvedMinSize;
+        if (resolvedMinSize.isSome())
+            return resolvedMinSize.unwrap();
 
         final automaticMinSize = (axis == Inline ? overflow.x : overflow.y).maybeIntoAutomaticMinSize();
-        if (automaticMinSize != null)
-            return automaticMinSize;
+        if (automaticMinSize.isSome())
+            return automaticMinSize.unwrap();
 
         // Automatic minimum size. See https://www.w3.org/TR/css-grid-1/#min-size-auto
 
@@ -714,8 +718,8 @@ class GridItem {
             // relevant axis, the size suggestion is capped by those sizes; for this purpose, any indefinite percentages
             // in these sizes are resolved against zero (and considered definite).
             if (isCompressibleReplaced) {
-                final s = size.get(axis).maybeResolve(0.0);
-                final m = maxSize.get(axis).maybeResolve(0.0);
+                final s = size.get(axis).maybeResolve(OptionalFloat.some(0.0));
+                final m = maxSize.get(axis).maybeResolve(OptionalFloat.some(0.0));
                 minimumContribution = MaybeMath.maybeMinF(MaybeMath.maybeMinF(minimumContribution, s), m);
             }
 
@@ -725,7 +729,7 @@ class GridItem {
             // minimum size in the same way as a fixed max track sizing function. The clamp is a stretch fit into
             // the limit, so it does not shrink the item below its padding + border.
             final limit = spannedFixedTrackLimit(axis, axisTracks, axisInnerNodeSize);
-            return MaybeMath.maybeMinF(minimumContribution, limit != null ? Sys.f32Max(limit, paddingBorderSize.get(axis)) : null);
+            return MaybeMath.maybeMinF(minimumContribution, limit.isSome() ? OptionalFloat.some(Sys.f32Max(limit.unwrap(), paddingBorderSize.get(axis))) : OptionalFloat.NONE);
         }
         else {
             return 0.0;
@@ -734,17 +738,17 @@ class GridItem {
 
     /** Retrieve the item's minimum contribution from the cache or compute it using the provided parameters */
     public inline function minimumContributionCached(tree:LayoutPartialTree, axis:AbstractAxis, axisTracks:Array<GridTrack>,
-            gridAreaSize:SizeOf<Null<Float>>, innerNodeSize:SizeOf<Null<Float>>):Float {
+            gridAreaSize:SizeOpt, innerNodeSize:SizeOpt):Float {
         final cached = axis == Inline ? minimumContributionCacheWidth : minimumContributionCacheHeight;
-        return if (cached != null) {
-            cached;
+        return if (cached.isSome()) {
+            cached.unwrap();
         }
         else {
             final size = minimumContribution(tree, axis, axisTracks, gridAreaSize, innerNodeSize);
             if (axis == Inline)
-                minimumContributionCacheWidth = size;
+                minimumContributionCacheWidth = OptionalFloat.some(size);
             else
-                minimumContributionCacheHeight = size;
+                minimumContributionCacheHeight = OptionalFloat.some(size);
             size;
         }
     }

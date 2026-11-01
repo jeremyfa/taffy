@@ -12,6 +12,7 @@ import taffy.style.Style;
 import taffy.style.TrackSizingFunction;
 import taffy.util.MaybeMath;
 import taffy.util.Sys;
+import taffy.util.OptionalFloat;
 
 /**
  * The auto-repeat fit strategy to use
@@ -59,13 +60,20 @@ class ExplicitGrid {
 
     static final ZERO_SIZE:ExplicitGridSize = new ExplicitGridSize(0, 0);
 
+    /**
+     * `u32::MAX`, exact. An inline constant so that the `F32` macro leaves it
+     * alone: these helpers emulate integer casts, not f32 arithmetic (as an
+     * f32 literal it would round to 4294967296).
+     */
+    static inline final U32_MAX:Float = 4294967295.0;
+
     /** Saturating `u32` to `u16`-ish clamp used for track counts */
     static inline function u32Clamp(value:Float):Float {
-        return value < 0 ? 0 : (value > 4294967295.0 ? 4294967295.0 : value);
+        return value < 0 ? 0 : (value > U32_MAX ? U32_MAX : value);
     }
 
     /** Compute the number of rows and columns in the explicit grid */
-    public static function computeExplicitGridSizeInAxis(style:Style, autoFitContainerSize:Null<Float>, autoFitStrategy:AutoRepeatStrategy,
+    public static function computeExplicitGridSizeInAxis(style:Style, autoFitContainerSize:OptionalFloat, autoFitStrategy:AutoRepeatStrategy,
             axis:AbsoluteAxis):ExplicitGridSize {
         final template = style.gridTemplateTracks(axis);
 
@@ -142,12 +150,12 @@ class ExplicitGrid {
         final repetitionTrackCount = repetitionDefinition.trackCount();
 
         // Determine the number of repetitions
-        var numRepetitions:Float = if (autoFitContainerSize == null) {
+        var numRepetitions:Float = if (autoFitContainerSize.isNone()) {
             1;
         }
         else {
-            final innerContainerSize:Float = autoFitContainerSize;
-            final parentSize:Null<Float> = innerContainerSize;
+            final innerContainerSize:Float = autoFitContainerSize.unwrap();
+            final parentSize:OptionalFloat = OptionalFloat.some(innerContainerSize);
 
             var nonRepeatingTrackUsedSpace = 0.0;
             for (trackDef in template) {
@@ -166,7 +174,7 @@ class ExplicitGrid {
                 }
             }
             final gapStyle:LengthPercentage = axis == Horizontal ? style.gap.width : style.gap.height;
-            final gapSize = gapStyle.resolveOrZero(innerContainerSize);
+            final gapSize = gapStyle.resolveOrZero(OptionalFloat.some(innerContainerSize));
 
             // Compute the amount of space that a single repetition of the repeated track list takes
             var perRepetitionTrackUsedSpace = 0.0;
@@ -226,17 +234,17 @@ class ExplicitGrid {
 
     /** Emulates a saturating `f32 as u32` cast (NaN becomes 0) */
     static inline function asU32(value:Float):Float {
-        return value != value ? 0 : (value < 0 ? 0 : (value > 4294967295.0 ? 4294967295.0 : value));
+        return value != value ? 0 : (value < 0 ? 0 : (value > U32_MAX ? U32_MAX : value));
     }
 
     /**
      * ...treating each track as its max track sizing function if that is definite or as its minimum track sizing function
      * otherwise, flooring the max track sizing function by the min track sizing function if both are definite
      */
-    static function trackDefiniteValue(sizingFunction:TrackSizingFunction, parentSize:Null<Float>):Float {
+    static function trackDefiniteValue(sizingFunction:TrackSizingFunction, parentSize:OptionalFloat):Float {
         final maxSize = sizingFunction.max.definiteValue(parentSize);
         final minSize = sizingFunction.min.definiteValue(parentSize);
-        return maxSize != null ? MaybeMath.maybeMaxF(maxSize, minSize) : (minSize : Float);
+        return maxSize.isSome() ? MaybeMath.maybeMaxF(maxSize.unwrap(), minSize) : minSize.unwrap();
     }
 
     /**

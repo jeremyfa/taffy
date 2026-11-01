@@ -22,6 +22,8 @@ import taffy.tree.LayoutInput;
 import taffy.tree.LayoutOutput;
 import taffy.tree.NodeId;
 import taffy.tree.TaffyTree;
+import taffy.style.AvailableSpace.Definite;
+import taffy.geometry.SizeAvail;
 
 /**
  * A named test function
@@ -98,10 +100,10 @@ class TestHelpers {
     /** The zero width space separating "lines" in Ahem text */
     public static final ZWS:String = String.fromCharCode(0x200B);
 
-    public static final MAX_CONTENT:SizeOf<AvailableSpace> = new SizeOf<AvailableSpace>(MaxContent, MaxContent);
+    public static final MAX_CONTENT:SizeAvail = new SizeAvail(MaxContent, MaxContent);
 
-    public static function definite(width:Float, height:Float):SizeOf<AvailableSpace> {
-        return new SizeOf<AvailableSpace>(Definite(width), Definite(height));
+    public static function definite(width:Float, height:Float):SizeAvail {
+        return new SizeAvail(Definite(width), Definite(height));
     }
 
     /** Creates a `TaffyTree` that uses `TestNodeContext` */
@@ -114,11 +116,11 @@ class TestHelpers {
         return Leaf.computeLeafLayout(inputs, style, (knownDimensions, availableSpace) -> {
             final kw = knownDimensions.width;
             final kh = knownDimensions.height;
-            if (kw != null && kh != null)
-                return new Size(kw, kh);
+            if (kw.isSome() && kh.isSome())
+                return new Size(kw.unwrap(), kh.unwrap());
 
             if (context == null)
-                return new Size(kw != null ? kw : 0.0, kh != null ? kh : 0.0);
+                return new Size(kw.isSome() ? kw.unwrap() : 0.0, kh.isSome() ? kh.unwrap() : 0.0);
 
             // Increment count
             context.count++;
@@ -127,13 +129,13 @@ class TestHelpers {
                 case Zero: Size.ZERO;
                 case Fixed(size): size;
                 case AspectRatio(width, heightRatio):
-                    final w:Float = kw != null ? kw : width;
-                    final h:Float = kh != null ? kh : w * heightRatio;
+                    final w:Float = kw.isSome() ? kw.unwrap() : width;
+                    final h:Float = kh.isSome() ? kh.unwrap() : w * heightRatio;
                     new Size(w, h);
                 case AhemText(data): data.measure(knownDimensions, availableSpace);
             }
 
-            return new Size(kw != null ? kw : computeSize.width, kh != null ? kh : computeSize.height);
+            return new Size(kw.isSome() ? kw.unwrap() : computeSize.width, kh.isSome() ? kh.unwrap() : computeSize.height);
         });
     }
 

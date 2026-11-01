@@ -20,6 +20,7 @@ import taffy.tree.LayoutInput;
 import taffy.tree.LayoutOutput;
 import taffy.tree.NodeId;
 import taffy.tree.TaffyTree;
+import taffy.util.OptionalFloat;
 
 /**
  * A node context that pairs an intrinsic size with a first-baseline offset
@@ -29,9 +30,9 @@ private class BaselineContext {
 
     public final size:Size;
 
-    public final baselineY:Null<Float>;
+    public final baselineY:taffy.util.OptionalFloat;
 
-    public function new(size:Size, baselineY:Null<Float>) {
+    public function new(size:Size, baselineY:taffy.util.OptionalFloat) {
         this.size = size;
         this.baselineY = baselineY;
     }
@@ -82,9 +83,9 @@ class BaselineTests {
         final taffy = new TaffyTree<BaselineContext>();
 
         // Child A: 50x50 box with baseline 40px from the top
-        final childA = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(50.0, 50.0), 40.0));
+        final childA = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(50.0, 50.0), OptionalFloat.some(40.0)));
         // Child B: 30x30 box with baseline 20px from the top
-        final childB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(30.0, 30.0), 20.0));
+        final childB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(30.0, 30.0), OptionalFloat.some(20.0)));
 
         final root = taffy.newWithChildren(flexRoot(AlignItems.BASELINE, 200.0, 100.0), [childA, childB]);
 
@@ -115,14 +116,14 @@ class BaselineTests {
             s.display = Block;
             s.overflow = new PointOf<Overflow>(Hidden, Hidden);
             s.size = new SizeOf<Dimension>(length(30.0), length(30.0));
-        }), new BaselineContext(new Size(30.0, 30.0), null));
+        }), new BaselineContext(new Size(30.0, 30.0), OptionalFloat.NONE));
 
         // A block container wrapping the scroll container, with bottom padding so that the
         // synthesized baseline (30) differs from the wrapper's border-box bottom edge (50).
         final itemA = taffy.newWithChildren(paddedBlock(), [scrollChild]);
 
         // Reference item: 40x80 box with baseline 10px from the top
-        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), 10.0));
+        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), OptionalFloat.some(10.0)));
 
         final root = taffy.newWithChildren(flexRoot(AlignItems.BASELINE, 200.0, 120.0), [itemA, itemB]);
 
@@ -146,12 +147,12 @@ class BaselineTests {
         final plainChild = taffy.newLeafWithContext(st(s -> {
             s.display = Block;
             s.size = new SizeOf<Dimension>(length(30.0), length(30.0));
-        }), new BaselineContext(new Size(30.0, 30.0), null));
+        }), new BaselineContext(new Size(30.0, 30.0), OptionalFloat.NONE));
 
         final itemA = taffy.newWithChildren(paddedBlock(), [plainChild]);
 
         // Reference item: 40x80 box with baseline 10px from the top
-        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), 10.0));
+        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), OptionalFloat.some(10.0)));
 
         final root = taffy.newWithChildren(flexRoot(AlignItems.BASELINE, 200.0, 120.0), [itemA, itemB]);
 
@@ -174,7 +175,7 @@ class BaselineTests {
         // Content with a baseline 48px from the top, inside a 30px tall scroll container
         final content = taffy.newLeafWithContext(st(s -> {
             s.display = Block;
-        }), new BaselineContext(new Size(30.0, 60.0), 48.0));
+        }), new BaselineContext(new Size(30.0, 60.0), OptionalFloat.some(48.0)));
 
         final scrollChild = taffy.newWithChildren(st(s -> {
             s.display = Block;
@@ -185,7 +186,7 @@ class BaselineTests {
         final itemA = taffy.newWithChildren(paddedBlock(), [scrollChild]);
 
         // Reference item: 40x80 box with baseline 10px from the top
-        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), 10.0));
+        final itemB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(40.0, 80.0), OptionalFloat.some(10.0)));
 
         final root = taffy.newWithChildren(flexRoot(AlignItems.BASELINE, 200.0, 120.0), [itemA, itemB]);
 
@@ -204,8 +205,8 @@ class BaselineTests {
     static function flexBaselineIsIgnoredWhenAlignmentIsNotBaseline() {
         final taffy = new TaffyTree<BaselineContext>();
 
-        final childA = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(50.0, 50.0), 40.0));
-        final childB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(30.0, 30.0), 20.0));
+        final childA = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(50.0, 50.0), OptionalFloat.some(40.0)));
+        final childB = taffy.newLeafWithContext(new Style(), new BaselineContext(new Size(30.0, 30.0), OptionalFloat.some(20.0)));
 
         final root = taffy.newWithChildren(flexRoot(AlignItems.FLEX_START, 200.0, 100.0), [childA, childB]);
 

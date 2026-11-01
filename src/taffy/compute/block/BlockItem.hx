@@ -22,6 +22,7 @@ import taffy.style.Position;
 import taffy.tree.Layout;
 import taffy.tree.NodeId;
 import taffy.tree.OofCandidates;
+import taffy.geometry.SizeOpt;
 
 /**
  * Per-child data that is accumulated and modified over the course of the block layout algorithm
@@ -53,13 +54,13 @@ class BlockItem {
     public var sizeStyle:SizeOf<Dimension>;
 
     /** The base size of this item */
-    public var size:SizeOf<Null<Float>>;
+    public var size:SizeOpt;
 
     /** The minimum allowable size of this item */
-    public var minSize:SizeOf<Null<Float>>;
+    public var minSize:SizeOpt;
 
     /** The maximum allowable size of this item */
-    public var maxSize:SizeOf<Null<Float>>;
+    public var maxSize:SizeOpt;
 
     /** The overflow style of the item */
     public var overflow:PointOf<Overflow>;

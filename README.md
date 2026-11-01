@@ -21,12 +21,12 @@ Everything enabled by the default feature set of taffy 0.15.0 (`std`, `taffy_tre
 
 ## Differences with the Rust API
 
-- Arithmetic is single precision like upstream (`f32`): every class of the `taffy` package is built with `taffy.util.F32.build` (declared in `extraParams.hxml`, so it applies wherever the library is used with `-lib taffy`), which rounds the result of each float `+`, `-`, `*`, `/` and each float literal to the nearest `f32`. This is exact, not an approximation, and gives the same layouts as upstream where doubles would round some positions to the other side of a half pixel. Define `taffy_f64` to compute in double precision instead (faster, but not identical to upstream). Builds that add `src` with `-cp` instead of `-lib taffy` must add the line of `extraParams.hxml` themselves (as `test/build.hxml` does).
+- Arithmetic is single precision like upstream (`f32`): every class of the `taffy` package is built with `taffy.util.F32.build` (declared in `extraParams.hxml`, so it applies wherever the library is used with `-lib taffy`), which rounds the result of each float `+`, `-`, `*`, `/` to the nearest `f32` and rewrites each float literal as its `f32` value at compile time (a run time `fround` of a literal could be constant folded away on hxcpp). Inline constants (`static inline final`) are left alone, for the values that must stay exact doubles (sentinels, integer bounds); `-D taffy_literal_check` registers every rewritten literal so the test suite can check it on each target. This is exact, not an approximation, and gives the same layouts as upstream where doubles would round some positions to the other side of a half pixel. Define `taffy_f64` to compute in double precision instead (faster, but not identical to upstream). Builds that add `src` with `-cp` instead of `-lib taffy` must add the line of `extraParams.hxml` themselves (as `test/build.hxml` does).
 
 - Names are converted to camelCase (`compute_layout_with_measure` becomes `computeLayoutWithMeasure`). Types keep their Rust names, except `Float` (the CSS `float` property) which is `CssFloat`.
-- `Option<f32>` is `Null<Float>`.
-- Geometry: `Size`, `Rect`, `Point` and `Line` are concrete `Float` classes. Generic versions are `SizeOf<T>`, `RectOf<T>`, `PointOf<T>`, `LineOf<T>` (for example `SizeOf<AvailableSpace>`, `SizeOf<Null<Float>>`, `RectOf<LengthPercentageAuto>`). Geometry objects are immutable: use `withWidth()`, `withMain()`... instead of mutating them. Helpers for `SizeOf<Null<Float>>` and `SizeOf<AvailableSpace>` are static extensions: `using taffy.geometry.SizeOf;`.
-- `AvailableSpace` is a Haxe enum (`Definite(v)`, `MinContent`, `MaxContent`). Compare values with `equals()` (from `using taffy.style.AvailableSpace;`), not `==`.
+- `Option<f32>` is `taffy.util.OptionalFloat`, an abstract over `Float` (nothing is boxed): `OptionalFloat.NONE`, `OptionalFloat.some(v)` (no implicit conversion from `Float`, so a `Null<Float>` can never turn into a present value by accident; use `fromNullable(v)` at a nullable boundary), `isSome()`, `isNone()`, `unwrap()`, `unwrapOr()`, `or()` and the `MaybeMath` helpers as methods (`maybeMin`, `maybeMax`, `maybeClamp`, `maybeAdd`, `maybeSub`). The absent value is a finite sentinel outside the f32 range: never write it as a number. Define `taffy_check_optional` to make `unwrap()` throw on an absent value.
+- Geometry: `Size`, `Rect`, `Point` and `Line` are concrete `Float` classes; `SizeOpt`, `RectOpt`, `PointOpt` are their `Option<f32>` versions (`Size<Option<f32>>`...) and `SizeAvail` is `Size<AvailableSpace>`, all with unboxed fields. Generic versions are `SizeOf<T>`, `RectOf<T>`, `PointOf<T>`, `LineOf<T>` (for example `SizeOf<Dimension>`, `RectOf<LengthPercentageAuto>`). Geometry objects are immutable: use `withWidth()`, `withMain()`... instead of mutating them.
+- `AvailableSpace` is an enum abstract over `Float` (nothing is allocated): `MinContent`, `MaxContent` and `Definite(v)` (import `taffy.style.AvailableSpace.Definite`). Switch on it with `case MinContent:`, `case MaxContent:` and a capture last (`case space: space.definiteValue()`), or test `isDefinite()`. `==` compares like Rust's `PartialEq`. Helpers: `using taffy.style.AvailableSpace;`.
 - `Dimension`, `LengthPercentage`, `LengthPercentageAuto`, `MinTrackSizingFunction` and `MaxTrackSizingFunction` are abstracts over `CompactLength`.
 - The Rust style traits (`CoreStyle`, `FlexboxContainerStyle`, `GridContainerStyle`...) are collapsed into the concrete `Style` class. The tree traits (`LayoutPartialTree`, `LayoutFlexboxContainer`, `LayoutGridContainer`, `LayoutBlockContainer`, `LayoutContainingBlock`, `CacheTree`, `RoundTree`, `PrintTree`) are Haxe interfaces, so the layout algorithms can run on any tree implementation, like upstream.
 - `TaffyTree` errors are thrown as `TaffyError` values instead of being returned as `Result`.
@@ -36,6 +36,7 @@ Everything enabled by the default feature set of taffy 0.15.0 (`std`, `taffy_tre
 ```haxe
 import taffy.compute.Leaf;
 import taffy.geometry.Size;
+import taffy.geometry.SizeAvail;
 import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
 import taffy.style.Dimension;
@@ -57,13 +58,13 @@ class Example {
 
         tree.computeLayoutWithMeasure(
             root,
-            new SizeOf<AvailableSpace>(MaxContent, MaxContent),
+            SizeAvail.MAX_CONTENT,
             (inputs, nodeId, context, style) -> Leaf.computeLeafLayout(inputs, style, (knownDimensions, availableSpace) -> {
                 if (context == null)
                     return Size.ZERO;
                 // Measure the text here (10 x 20 pixels per character in this example)
-                final width = knownDimensions.width != null ? knownDimensions.width : context.length * 10.0;
-                final height = knownDimensions.height != null ? knownDimensions.height : 20.0;
+                final width = knownDimensions.width.unwrapOr(context.length * 10.0);
+                final height = knownDimensions.height.unwrapOr(20.0);
                 return new Size(width, height);
             })
         );

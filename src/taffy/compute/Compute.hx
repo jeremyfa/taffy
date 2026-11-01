@@ -30,6 +30,9 @@ import taffy.tree.OofCandidate;
 import taffy.tree.OofCandidates;
 import taffy.tree.RoundTree;
 import taffy.util.Sys;
+import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
+import taffy.geometry.SizeAvail;
 
 using taffy.geometry.SizeOf;
 using taffy.style.AvailableSpace;
@@ -65,13 +68,13 @@ class Compute {
      *   position at the ICB origin. This requires a definite `availableSpace` in both axes.
      * - A `position: relative` root is laid out in flow and then offset by its insets.
      */
-    public static function computeRootLayout(tree:LayoutContainingBlockCacheTree, root:NodeId, availableSpace:SizeOf<AvailableSpace>):Void {
+    public static function computeRootLayout(tree:LayoutContainingBlockCacheTree, root:NodeId, availableSpace:SizeAvail):Void {
         final style = tree.getCoreContainerStyle(root);
         final position = style.position;
         final direction = style.direction;
 
         final icbSize = availableSpace.intoOptions();
-        final oofRoot = position.isOutOfFlow() && icbSize.width != null && icbSize.height != null;
+        final oofRoot = position.isOutOfFlow() && icbSize.width.isSome() && icbSize.height.isSome();
 
         // When the root's layout is served from the cache its layout algorithm does not run, so the
         // hoisted children it recorded on a previous run are still in place and must not be re-added.
@@ -79,7 +82,7 @@ class Compute {
         var layout:Layout;
         var candidates:OofCandidates;
         if (oofRoot) {
-            final areaSize = new Size(icbSize.width, icbSize.height);
+            final areaSize = new Size(icbSize.width.unwrap(), icbSize.height.unwrap());
             // The static position of the root places its margin box at the origin of the ICB
             final start = direction.isRtl() ? areaSize.width : 0.0;
             final candidate = new OofCandidate(
@@ -122,8 +125,8 @@ class Compute {
             final rootPaddingBoxSize = layout.size.sub(new Size(areaInset.horizontalAxisSum(), areaInset.verticalAxisSum()));
             var areaWidth:Float;
             var areaX:Float;
-            if (icbSize.width != null) {
-                areaWidth = Sys.f32Max((icbSize.width : Float) - layout.scrollbarSize.width, 0.0);
+            if (icbSize.width.isSome()) {
+                areaWidth = Sys.f32Max(icbSize.width.unwrap() - layout.scrollbarSize.width, 0.0);
                 areaX = -layout.location.x;
             }
             else {
@@ -132,8 +135,8 @@ class Compute {
             }
             var areaHeight:Float;
             var areaY:Float;
-            if (icbSize.height != null) {
-                areaHeight = Sys.f32Max((icbSize.height : Float) - layout.scrollbarSize.height, 0.0);
+            if (icbSize.height.isSome()) {
+                areaHeight = Sys.f32Max(icbSize.height.unwrap() - layout.scrollbarSize.height, 0.0);
                 areaY = -layout.location.y;
             }
             else {
@@ -165,8 +168,8 @@ class Compute {
      * Lay out an in-flow (or `position: relative`) root node against the available space, store its layout
      * and return it along with the out-of-flow candidates bubbled up from its subtree.
      */
-    static function computeInFlowRootLayout(tree:LayoutContainingBlockCacheTree, root:NodeId, availableSpace:SizeOf<AvailableSpace>):InFlowRootResult {
-        var knownDimensions:SizeOf<Null<Float>> = OptionSizeTools.NONE;
+    static function computeInFlowRootLayout(tree:LayoutContainingBlockCacheTree, root:NodeId, availableSpace:SizeAvail):InFlowRootResult {
+        var knownDimensions:SizeOpt = SizeOpt.NONE;
 
         // The available space passed to the root excludes the root's margins
         final rootAvailableSpace = {
@@ -195,13 +198,13 @@ class Compute {
                     .maybeClamp(minSize, maxSize);
 
                 // If both min and max in a given axis are set and max <= min then this determines the size in that axis
-                final minMaxDefiniteSize = new SizeOf<Null<Float>>(
-                    (minSize.width != null && maxSize.width != null && (maxSize.width : Float) <= (minSize.width : Float)) ? minSize.width : null,
-                    (minSize.height != null && maxSize.height != null && (maxSize.height : Float) <= (minSize.height : Float)) ? minSize.height : null
+                final minMaxDefiniteSize = new SizeOpt(
+                    (minSize.width.isSome() && maxSize.width.isSome() && maxSize.width.unwrap() <= minSize.width.unwrap()) ? minSize.width : OptionalFloat.NONE,
+                    (minSize.height.isSome() && maxSize.height.isSome() && maxSize.height.unwrap() <= minSize.height.unwrap()) ? minSize.height : OptionalFloat.NONE
                 );
 
                 // Block nodes automatically stretch fit their width to fit available space if available space is definite
-                final availableSpaceBasedSize = new SizeOf<Null<Float>>(rootAvailableSpace.width.intoOption(), null);
+                final availableSpaceBasedSize = new SizeOpt(rootAvailableSpace.width.intoOption(), OptionalFloat.NONE);
 
                 knownDimensions = knownDimensions
                     .or(minMaxDefiniteSize)
@@ -239,7 +242,7 @@ class Compute {
         final isRtl = style.direction.isRtl();
 
         // The root's margin box is placed at the origin of the initial containing block
-        var locationX = (isRtl && availableWidth != null) ? (availableWidth : Float) - output.size.width - margin.right : margin.left;
+        var locationX = (isRtl && availableWidth.isSome()) ? availableWidth.unwrap() - output.size.width - margin.right : margin.left;
         var locationY = margin.top;
 
         // A relatively positioned root is offset by its insets (resolved against the initial containing block)
@@ -250,8 +253,8 @@ class Compute {
             final right = inset.right.maybeResolve(icbSize.width);
             final top = inset.top.maybeResolve(icbSize.height);
             final bottom = inset.bottom.maybeResolve(icbSize.height);
-            final negRight:Null<Float> = right != null ? -(right : Float) : null;
-            final negBottom:Null<Float> = bottom != null ? -(bottom : Float) : null;
+            final negRight:OptionalFloat = right.isSome() ? OptionalFloat.some(-right.unwrap()) : OptionalFloat.NONE;
+            final negBottom:OptionalFloat = bottom.isSome() ? OptionalFloat.some(-bottom.unwrap()) : OptionalFloat.NONE;
             locationX += isRtl ? negRight.or(left).unwrapOr(0.0) : left.or(negRight).unwrapOr(0.0);
             locationY += top.or(negBottom).unwrapOr(0.0);
         }

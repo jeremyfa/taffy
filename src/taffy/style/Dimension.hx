@@ -4,6 +4,8 @@
 
 package taffy.style;
 
+import taffy.util.OptionalFloat;
+
 /**
  * A unit of linear measurement: a length, a percentage, `auto`, or a sizing keyword
  * (`min-content`, `max-content`, `fit-content`, `fit-content(...)`, `stretch`, `content`).
@@ -91,8 +93,8 @@ abstract Dimension(CompactLength) {
     }
 
     /** Get Length value if value is Length variant */
-    public inline function intoOption():Null<Float> {
-        return this.tag == CompactLength.LENGTH_TAG ? this.value : null;
+    public inline function intoOption():OptionalFloat {
+        return this.tag == CompactLength.LENGTH_TAG ? OptionalFloat.some(this.value) : OptionalFloat.NONE;
     }
 
     /** Returns true if the value is auto */
@@ -129,18 +131,18 @@ abstract Dimension(CompactLength) {
     }
 
     /** Resolve against an optional context (Rust `MaybeResolve<Option<f32>, Option<f32>>`) */
-    public inline function maybeResolve(context:Null<Float>):Null<Float> {
+    public inline function maybeResolve(context:OptionalFloat):OptionalFloat {
         return switch this.tag {
-            case CompactLength.LENGTH_TAG: this.value;
-            case CompactLength.PERCENT_TAG: context != null ? (context : Float) * this.value : null;
-            case _: null;
+            case CompactLength.LENGTH_TAG: OptionalFloat.some(this.value);
+            case CompactLength.PERCENT_TAG: context.isSome() ? OptionalFloat.some(context.unwrap() * this.value) : OptionalFloat.NONE;
+            case _: OptionalFloat.NONE;
         }
     }
 
     /** Resolve against an optional context, defaulting to zero */
-    public inline function resolveOrZero(context:Null<Float>):Float {
+    public inline function resolveOrZero(context:OptionalFloat):Float {
         final r = maybeResolve(context);
-        return r != null ? (r : Float) : 0.0;
+        return r.isSome() ? r.unwrap() : 0.0;
     }
 
     public inline function equals(other:Dimension):Bool {

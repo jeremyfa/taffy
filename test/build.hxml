@@ -3,5 +3,6 @@
 -cp src
 -main Main
 -D analyzer-optimize
+-D taffy_literal_check
 -js bin/test.js
 --macro addGlobalMetadata('taffy', '@:build(taffy.util.F32.build())')

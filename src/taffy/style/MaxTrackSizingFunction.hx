@@ -4,6 +4,8 @@
 
 package taffy.style;
 
+import taffy.util.OptionalFloat;
+
 /**
  * Maximum track sizing function
  *
@@ -159,10 +161,10 @@ abstract MaxTrackSizingFunction(CompactLength) {
     }
 
     /** Returns whether the value can be resolved using `definiteValue` */
-    public inline function hasDefiniteValue(parentSize:Null<Float>):Bool {
+    public inline function hasDefiniteValue(parentSize:OptionalFloat):Bool {
         return switch this.tag {
             case CompactLength.LENGTH_TAG: true;
-            case CompactLength.PERCENT_TAG: parentSize != null;
+            case CompactLength.PERCENT_TAG: parentSize.isSome();
             case _: false;
         }
     }
@@ -171,11 +173,11 @@ abstract MaxTrackSizingFunction(CompactLength) {
      * Returns fixed point values directly. Attempts to resolve percentage values against
      * the passed parentSize and returns if this results in a concrete value. Otherwise returns null.
      */
-    public inline function definiteValue(parentSize:Null<Float>):Null<Float> {
+    public inline function definiteValue(parentSize:OptionalFloat):OptionalFloat {
         return switch this.tag {
-            case CompactLength.LENGTH_TAG: this.value;
-            case CompactLength.PERCENT_TAG: parentSize != null ? this.value * (parentSize : Float) : null;
-            case _: null;
+            case CompactLength.LENGTH_TAG: OptionalFloat.some(this.value);
+            case CompactLength.PERCENT_TAG: parentSize.isSome() ? OptionalFloat.some(this.value * parentSize.unwrap()) : OptionalFloat.NONE;
+            case _: OptionalFloat.NONE;
         }
     }
 
@@ -184,11 +186,11 @@ abstract MaxTrackSizingFunction(CompactLength) {
      * Returns null if this is not a `fit-content()` function, or if it has a percentage argument and
      * `parentSize` is indefinite.
      */
-    public inline function fitContentLimit(parentSize:Null<Float>):Null<Float> {
+    public inline function fitContentLimit(parentSize:OptionalFloat):OptionalFloat {
         return switch this.tag {
-            case CompactLength.FIT_CONTENT_PX_TAG: this.value;
-            case CompactLength.FIT_CONTENT_PERCENT_TAG: parentSize != null ? this.value * (parentSize : Float) : null;
-            case _: null;
+            case CompactLength.FIT_CONTENT_PX_TAG: OptionalFloat.some(this.value);
+            case CompactLength.FIT_CONTENT_PERCENT_TAG: parentSize.isSome() ? OptionalFloat.some(this.value * parentSize.unwrap()) : OptionalFloat.NONE;
+            case _: OptionalFloat.NONE;
         }
     }
 
@@ -200,16 +202,16 @@ abstract MaxTrackSizingFunction(CompactLength) {
      *     - A fit-content sizing function with percentage argument (with definite available space)
      * All other kinds of track sizing function return null.
      */
-    public inline function definiteLimit(parentSize:Null<Float>):Null<Float> {
+    public inline function definiteLimit(parentSize:OptionalFloat):OptionalFloat {
         return switch this.tag {
-            case CompactLength.FIT_CONTENT_PX_TAG: this.value;
-            case CompactLength.FIT_CONTENT_PERCENT_TAG: parentSize != null ? this.value * (parentSize : Float) : null;
+            case CompactLength.FIT_CONTENT_PX_TAG: OptionalFloat.some(this.value);
+            case CompactLength.FIT_CONTENT_PERCENT_TAG: parentSize.isSome() ? OptionalFloat.some(this.value * parentSize.unwrap()) : OptionalFloat.NONE;
             case _: definiteValue(parentSize);
         }
     }
 
     /** Resolve percentage values against the passed parentSize. Non-percentage values always return null. */
-    public inline function resolvedPercentageSize(parentSize:Float):Null<Float> {
+    public inline function resolvedPercentageSize(parentSize:Float):OptionalFloat {
         return this.resolvedPercentageSize(parentSize);
     }
 

@@ -1,0 +1,1 @@
+--macro addGlobalMetadata('taffy', '@:build(taffy.util.F32.build())')

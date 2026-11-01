@@ -1,0 +1,12 @@
+{
+    "name": "taffy",
+    "url": "https://github.com/DioxusLabs/taffy",
+    "license": "MIT",
+    "tags": ["layout", "flexbox", "grid", "css", "ui", "cross"],
+    "description": "Pure Haxe port of taffy 0.15.0, a UI layout library implementing CSS Block, Flexbox and Grid layout.",
+    "version": "0.1.0",
+    "classPath": "src",
+    "releasenote": "Initial port of taffy 0.15.0.",
+    "contributors": ["jeremyfa"],
+    "dependencies": {}
+}

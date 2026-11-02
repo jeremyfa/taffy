@@ -321,12 +321,8 @@ class GridAlignment {
 
         // Contributions to the container's scrollable overflow rect are measured from the
         // container's padding-box origin (mirrored for RTL), matching the scrollable overflow region.
-        final contributionLocation = if (direction.isRtl()) {
-            new Point(containerBorderBoxWidth - (x + finalWidth) - containerBorder.right, y - containerBorder.top);
-        }
-        else {
-            new Point(x - containerBorder.left, y - containerBorder.top);
-        }
+        final isRtlLocation = direction.isRtl();
+        final contributionLocation = new Point(isRtlLocation ? containerBorderBoxWidth - (x + finalWidth) - containerBorder.right : x - containerBorder.left, y - containerBorder.top);
         final contribution = ScrollableOverflow.computeScrollableOverflowContribution(contributionLocation, new Size(finalWidth, finalHeight),
             layoutOutput.scrollableOverflowRect, overflow, contain, containerIsScrollContainer);
 

@@ -208,6 +208,13 @@ class FixtureResult {
  */
 class XmlTests {
 
+    /**
+     * When set (`--relayout-check` of the runner), every fixture is laid out twice more and must
+     * give exactly the same layout: once again with every cache entry in place (cache hits all the
+     * way down), and once with every node marked dirty
+     */
+    public static var relayoutCheck:Bool = false;
+
     /** When set (`--dump <file>` of the runner), receives the computed layout of every fixture */
     public static var dump:Null<StringBuf> = null;
 
@@ -241,6 +248,21 @@ class XmlTests {
         final actual = getComputedExpectations(tree, rootNodeId);
         if (dump != null)
             actual.writeTree(dump, "  ");
+        if (relayoutCheck) {
+            final first = new StringBuf();
+            actual.writeTree(first, "  ");
+            tree.computeLayoutWithMeasure(rootNodeId, availableSpace, testMeasureFunction);
+            final cached = new StringBuf();
+            getComputedExpectations(tree, rootNodeId).writeTree(cached, "  ");
+            markAllDirty(tree, rootNodeId);
+            tree.computeLayoutWithMeasure(rootNodeId, availableSpace, testMeasureFunction);
+            final dirty = new StringBuf();
+            getComputedExpectations(tree, rootNodeId).writeTree(dirty, "  ");
+            if (cached.toString() != first.toString())
+                return new FixtureResult(false, "RELAYOUT WITH CACHE DIFFERS\n" + first.toString() + "CACHED\n" + cached.toString());
+            if (dirty.toString() != first.toString())
+                return new FixtureResult(false, "RELAYOUT AFTER MARKING DIRTY DIFFERS\n" + first.toString() + "DIRTY\n" + dirty.toString());
+        }
         if (expected.matches(actual))
             return new FixtureResult(true, "");
         final buf = new StringBuf();
@@ -249,6 +271,12 @@ class XmlTests {
         buf.add("ACTUAL\n");
         actual.writeTree(buf, "  ");
         return new FixtureResult(false, buf.toString());
+    }
+
+    static function markAllDirty(tree:TaffyTree<TestNodeContext>, node:NodeId):Void {
+        tree.markDirty(node);
+        for (child in tree.children(node))
+            markAllDirty(tree, child);
     }
 
     /** The measure function used by the fixtures (`test_measure_function`) */

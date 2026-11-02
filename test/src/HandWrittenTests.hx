@@ -38,6 +38,7 @@ class HandWrittenTests {
             {name: "safe_alignment", tests: hand_written.SafeAlignmentTests.tests()},
             {name: "scroll_size", tests: hand_written.ScrollSizeTests.tests()},
             {name: "scrollable_overflow", tests: hand_written.ScrollableOverflowTests.tests()},
+            {name: "scratch_reuse", tests: hand_written.ScratchReuseTests.tests()},
         ];
     }
 

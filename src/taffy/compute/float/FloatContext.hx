@@ -158,6 +158,22 @@ class FloatContext {
     /** Create a new empty `FloatContext` */
     public function new() {}
 
+    /** Empty the context, as a new one (contexts are reused between layout calls) */
+    public function reset():Void {
+        availableWidth = 0.0;
+        hasFloatsFlag = false;
+        leftFloatsList.resize(0);
+        rightFloatsList.resize(0);
+        segments.resize(0);
+        lastPlacedFloatsStart[0] = 0;
+        lastPlacedFloatsStart[1] = 0;
+        lastPlacedFloatsEnd[0] = 0;
+        lastPlacedFloatsEnd[1] = 0;
+        clearBottoms[0] = OptionalFloat.NONE;
+        clearBottoms[1] = OptionalFloat.NONE;
+        floatCeiling = OptionalFloat.NONE;
+    }
+
     /** Create a copy of this context */
     public function clone():FloatContext {
         final c = new FloatContext();

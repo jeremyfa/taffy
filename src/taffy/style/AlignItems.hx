@@ -70,6 +70,7 @@ abstract AlignItems(Int) {
     }
 
     /** Resolve `self-start` / `self-end` against the item and container directions */
+    @:noDebug
     public function resolveSelfRelative(itemDirection:Direction, containerDirection:Direction, axisIsInline:Bool):AlignItems {
         final flip = axisIsInline && itemDirection != containerDirection;
         final kw:AlignItemsKeyword = switch keyword {

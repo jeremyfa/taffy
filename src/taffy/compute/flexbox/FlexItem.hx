@@ -112,16 +112,16 @@ class FlexItem {
     public var contentFlexFraction:Float = 0.0;
 
     /** The proposed inner size of this item */
-    public var hypotheticalInnerSize:Size = Size.ZERO;
+    public final hypotheticalInnerSize:FlexItemSize = new FlexItemSize();
 
     /** The proposed outer size of this item */
-    public var hypotheticalOuterSize:Size = Size.ZERO;
+    public final hypotheticalOuterSize:FlexItemSize = new FlexItemSize();
 
     /** The size that this item wants to be */
-    public var targetSize:Size = Size.ZERO;
+    public final targetSize:FlexItemSize = new FlexItemSize();
 
     /** The size that this item wants to be, plus any padding and border */
-    public var outerTargetSize:Size = Size.ZERO;
+    public final outerTargetSize:FlexItemSize = new FlexItemSize();
 
     /** The position of the bottom edge of this item */
     public var baseline:Float = 0.0;
@@ -148,7 +148,11 @@ class FlexItem {
      */
     public var oofCandidates:OofCandidates;
 
-    public function new(
+    /** An item to initialize with `reset` (items are reused between layout calls) */
+    public function new() {}
+
+    /** Initialize every field, as a newly created item */
+    public function reset(
         node:NodeId,
         order:Int,
         size:SizeOpt,
@@ -167,7 +171,7 @@ class FlexItem {
         scrollbarWidth:Float,
         flexGrow:Float,
         flexShrink:Float
-    ) {
+    ):FlexItem {
         this.node = node;
         this.order = order;
         this.size = size;
@@ -186,7 +190,23 @@ class FlexItem {
         this.scrollbarWidth = scrollbarWidth;
         this.flexGrow = flexGrow;
         this.flexShrink = flexShrink;
-        this.oofCandidates = new OofCandidates();
+        this.oofCandidates = OofCandidates.EMPTY;
+        // The algorithm's state, as in a new item
+        this.flexBasisIsDefinite = false;
+        this.resolvedMinimumMainSize = 0.0;
+        this.flexBasis = 0.0;
+        this.innerFlexBasis = 0.0;
+        this.violation = 0.0;
+        this.frozen = false;
+        this.contentFlexFraction = 0.0;
+        this.hypotheticalInnerSize.clear();
+        this.hypotheticalOuterSize.clear();
+        this.targetSize.clear();
+        this.outerTargetSize.clear();
+        this.baseline = 0.0;
+        this.offsetMain = 0.0;
+        this.offsetCross = 0.0;
+        return this;
     }
 
     /** Returns true if the item is a https://www.w3.org/TR/css-overflow-3/#scroll-container */

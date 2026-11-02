@@ -51,7 +51,8 @@ class Point {
 
     /** Return a copy with the given axis set to value */
     public inline function with(axis:AbstractAxis, value:Float):Point {
-        return axis == Inline ? new Point(value, y) : new Point(x, value);
+        final inl = axis == Inline;
+        return new Point(inl ? value : x, inl ? y : value);
     }
 
     public inline function withX(value:Float):Point {

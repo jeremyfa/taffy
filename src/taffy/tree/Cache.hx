@@ -120,13 +120,23 @@ private class CacheKey {
 /**
  * A cached measurement entry
  */
-private class MeasureEntry {
+private class MeasureEntry extends CacheKey {
 
-    public final key:CacheKey = new CacheKey();
+    /** The key of the entry (the entry itself: one object instead of two) */
+    public var key(get, never):CacheKey;
+
+    inline function get_key():CacheKey {
+        return this;
+    }
 
     public var content:Size = Size.ZERO;
 
-    public function new() {}
+    /** The output returned by cache hits, built from `content` on the first hit and shared by the next ones */
+    public var output:Null<LayoutOutput> = null;
+
+    public function new() {
+        super();
+    }
 
 }
 
@@ -189,6 +199,7 @@ class Cache {
     }
 
     /** Try to retrieve a cached result from the cache */
+    @:noDebug
     public function get(input:LayoutInput):Null<LayoutOutput> {
         if (mode != modeOf(input))
             return null;
@@ -196,8 +207,14 @@ class Cache {
         key.setFrom(input);
         switch input.runMode {
             case PerformLayout:
-                if (finalLayoutEntry != null && finalLayoutKey.equals(key))
-                    return finalLayoutEntry.clone();
+                if (finalLayoutEntry != null && finalLayoutKey.equals(key)) {
+                    // Shared without a copy when it carries no out-of-flow candidates: callers never
+                    // mutate the output of a child layout (only the algorithm that builds an output
+                    // updates it, before it is stored), they only `take()` its candidates, which
+                    // leaves an empty list unchanged. A list with candidates is copied, as `take()`
+                    // empties it.
+                    return finalLayoutEntry.oofCandidates.isEmpty() ? finalLayoutEntry : finalLayoutEntry.clone();
+                }
                 return null;
             case ComputeSize:
                 if (measureEntries == null)
@@ -212,7 +229,13 @@ class Cache {
                         && ek.parentWidth == key.parentWidth
                         && ek.sizeIsValidFor(key)) {
                         recentlyUsedEntries |= 1 << index;
-                        return LayoutOutput.fromOuterSize(entry.content);
+                        // Shared between hits, like the final layout entry above
+                        var output = entry.output;
+                        if (output == null) {
+                            output = LayoutOutput.fromOuterSize(entry.content);
+                            entry.output = output;
+                        }
+                        return output;
                     }
                 }
                 return null;
@@ -222,6 +245,7 @@ class Cache {
     }
 
     /** Store a computed size in the cache */
+    @:noDebug
     public function store(input:LayoutInput, layoutOutput:LayoutOutput):Void {
         if (input.runMode == PerformHiddenLayout)
             return;
@@ -236,7 +260,15 @@ class Cache {
             case PerformLayout:
                 empty = false;
                 finalLayoutKey.setFrom(input);
-                finalLayoutEntry = layoutOutput.clone();
+                // See `get`: an output without candidates is never mutated once returned, so it is
+                // kept as is (an empty list is normalized so that `take()` cannot reach its array)
+                if (layoutOutput.oofCandidates.isEmpty()) {
+                    layoutOutput.oofCandidates = OofCandidates.EMPTY;
+                    finalLayoutEntry = layoutOutput;
+                }
+                else {
+                    finalLayoutEntry = layoutOutput.clone();
+                }
             case ComputeSize:
                 // Results that carry margin-collapse metadata cannot be reconstructed from their size, so don't cache them
                 if (layoutOutput.marginsCanCollapseThrough
@@ -247,11 +279,16 @@ class Cache {
                 empty = false;
                 final key = scratchKey;
                 key.setFrom(input);
+                // Entries are created on first use (most nodes use one or two)
                 if (measureEntries == null)
-                    measureEntries = [for (_ in 0...CACHE_SIZE) new MeasureEntry()];
+                    measureEntries = [for (_ in 0...CACHE_SIZE) null];
                 for (index in 0...CACHE_SIZE) {
                     if (usedEntries & (1 << index) != 0 && measureEntries[index].key.equals(key)) {
-                        measureEntries[index].content = layoutOutput.size;
+                        final entry = measureEntries[index];
+                        if (entry.content != layoutOutput.size) {
+                            entry.content = layoutOutput.size;
+                            entry.output = null;
+                        }
                         recentlyUsedEntries |= 1 << index;
                         return;
                     }
@@ -263,9 +300,14 @@ class Cache {
                         nextMeasureEntry = 0;
                 }
                 final entryIndex = nextMeasureEntry;
-                final entry = measureEntries[entryIndex];
+                var entry = measureEntries[entryIndex];
+                if (entry == null) {
+                    entry = new MeasureEntry();
+                    measureEntries[entryIndex] = entry;
+                }
                 entry.key.copyFrom(key);
                 entry.content = layoutOutput.size;
+                entry.output = null;
                 usedEntries |= 1 << entryIndex;
                 recentlyUsedEntries |= 1 << entryIndex;
                 nextMeasureEntry++;

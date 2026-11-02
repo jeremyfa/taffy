@@ -57,16 +57,9 @@ class LayoutPartialTreeExt {
         axis:AbsoluteAxis,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):Float {
-        return tree.computeChildLayout(nodeId, new LayoutInput(
-            ComputeSize,
-            sizingMode,
-            RequestedAxis.fromAbsoluteAxis(axis),
-            knownDimensions,
-            DEFINITE_BOTH,
-            parentSize,
-            availableSpace,
-            verticalMarginsAreCollapsible
-        )).size.getAbs(axis);
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquire(ComputeSize, sizingMode, RequestedAxis.fromAbsoluteAxis(axis), knownDimensions, DEFINITE_BOTH, parentSize, availableSpace, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output.size.getAbs(axis);
     }
 
     /** Compute the size of the node given the specified constraints */
@@ -79,16 +72,9 @@ class LayoutPartialTreeExt {
         sizingMode:SizingMode,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):Size {
-        return tree.computeChildLayout(nodeId, new LayoutInput(
-            ComputeSize,
-            sizingMode,
-            Both,
-            knownDimensions,
-            DEFINITE_BOTH,
-            parentSize,
-            availableSpace,
-            verticalMarginsAreCollapsible
-        )).size;
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquire(ComputeSize, sizingMode, Both, knownDimensions, DEFINITE_BOTH, parentSize, availableSpace, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output.size;
     }
 
     /** Perform a full layout on the node given the specified constraints */
@@ -101,16 +87,9 @@ class LayoutPartialTreeExt {
         sizingMode:SizingMode,
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):LayoutOutput {
-        return tree.computeChildLayout(nodeId, new LayoutInput(
-            PerformLayout,
-            sizingMode,
-            Both,
-            knownDimensions,
-            DEFINITE_BOTH,
-            parentSize,
-            availableSpace,
-            verticalMarginsAreCollapsible
-        ));
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquire(PerformLayout, sizingMode, Both, knownDimensions, DEFINITE_BOTH, parentSize, availableSpace, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output;
     }
 
 }

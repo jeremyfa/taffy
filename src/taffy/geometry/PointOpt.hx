@@ -47,7 +47,8 @@ class PointOpt {
 
     /** Return a copy with the given axis set to value */
     public inline function with(axis:AbstractAxis, value:OptionalFloat):PointOpt {
-        return axis == Inline ? new PointOpt(value, y) : new PointOpt(x, value);
+        final inl = axis == Inline;
+        return new PointOpt(inl ? value : x, inl ? y : value);
     }
 
     public inline function withX(value:OptionalFloat):PointOpt {

@@ -63,6 +63,7 @@ class Alignment {
      *
      * CSS Grid does not apply gaps as part of alignment, so the gap parameter should always be set to zero for CSS Grid.
      */
+    @:noDebug
     public static function computeAlignmentOffset(freeSpace:Float, numItems:Int, gap:Float, alignmentMode:AlignContentKeyword, layoutIsFlexReversed:Bool, isFirst:Bool):Float {
         if (isFirst) {
             return switch alignmentMode {

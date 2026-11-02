@@ -54,7 +54,8 @@ class SizeAvail {
 
     /** Return a copy with the given axis set to value */
     public inline function with(axis:AbstractAxis, value:AvailableSpace):SizeAvail {
-        return axis == Inline ? new SizeAvail(value, height) : new SizeAvail(width, value);
+        final inl = axis == Inline;
+        return new SizeAvail(inl ? value : width, inl ? height : value);
     }
 
     /** Swap width and height */
@@ -87,12 +88,14 @@ class SizeAvail {
 
     /** Return a copy with the main axis set to value */
     public inline function withMain(direction:FlexDirection, value:AvailableSpace):SizeAvail {
-        return direction.isRow() ? new SizeAvail(value, height) : new SizeAvail(width, value);
+        final isRow = direction.isRow();
+        return new SizeAvail(isRow ? value : width, isRow ? height : value);
     }
 
     /** Return a copy with the cross axis set to value */
     public inline function withCross(direction:FlexDirection, value:AvailableSpace):SizeAvail {
-        return direction.isRow() ? new SizeAvail(width, value) : new SizeAvail(value, height);
+        final isRow = direction.isRow();
+        return new SizeAvail(isRow ? width : value, isRow ? value : height);
     }
 
     /** Convert into a `SizeOpt`: definite values become present, others absent */

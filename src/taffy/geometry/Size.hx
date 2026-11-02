@@ -35,6 +35,16 @@ class Size {
         this.height = height;
     }
 
+    /** `new Size(width, height)`, or the shared `ZERO` when both are +0 (for results that are stored) */
+    public static inline function shared(width:Float, height:Float):Size {
+        return (isPositiveZero(width) && isPositiveZero(height)) ? ZERO : new Size(width, height);
+    }
+
+    /** Whether `v` is +0 (not -0, which `ZERO` would turn into +0) */
+    public static inline function isPositiveZero(v:Float):Bool {
+        return v == 0.0 && 1.0 / v > 0.0;
+    }
+
     /** Get either the width or height depending on the `AbsoluteAxis` passed in */
     public inline function getAbs(axis:AbsoluteAxis):Float {
         return axis == Horizontal ? width : height;
@@ -47,7 +57,8 @@ class Size {
 
     /** Return a copy with the given axis set to value */
     public inline function with(axis:AbstractAxis, value:Float):Size {
-        return axis == Inline ? new Size(value, height) : new Size(width, value);
+        final inl = axis == Inline;
+        return new Size(inl ? value : width, inl ? height : value);
     }
 
     /** Swap width and height */
@@ -87,12 +98,14 @@ class Size {
 
     /** Return a copy with the main axis set to value */
     public inline function withMain(direction:FlexDirection, value:Float):Size {
-        return direction.isRow() ? new Size(value, height) : new Size(width, value);
+        final isRow = direction.isRow();
+        return new Size(isRow ? value : width, isRow ? height : value);
     }
 
     /** Return a copy with the cross axis set to value */
     public inline function withCross(direction:FlexDirection, value:Float):Size {
-        return direction.isRow() ? new Size(width, value) : new Size(value, height);
+        final isRow = direction.isRow();
+        return new Size(isRow ? width : value, isRow ? value : height);
     }
 
     /** Applies `f32_max` to each component separately */

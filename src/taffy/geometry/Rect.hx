@@ -44,6 +44,13 @@ class Rect {
         this.bottom = bottom;
     }
 
+    /** `new Rect(left, right, top, bottom)`, or the shared `ZERO` when all four are +0 (for results that are stored) */
+    public static inline function shared(left:Float, right:Float, top:Float, bottom:Float):Rect {
+        return (Size.isPositiveZero(left) && Size.isPositiveZero(right) && Size.isPositiveZero(top) && Size.isPositiveZero(bottom))
+            ? ZERO
+            : new Rect(left, right, top, bottom);
+    }
+
     public inline function add(rhs:Rect):Rect {
         return new Rect(left + rhs.left, right + rhs.right, top + rhs.top, bottom + rhs.bottom);
     }

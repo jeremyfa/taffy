@@ -12,6 +12,7 @@ import taffy.style.FlexDirection;
  * Immutable: every operation returns a new instance.
  */
 @:structInit
+@:generic
 class PointOf<T> {
 
     /** The x-coordinate */

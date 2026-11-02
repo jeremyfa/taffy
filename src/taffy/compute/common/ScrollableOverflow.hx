@@ -23,8 +23,21 @@ class ScrollableOverflow {
      * `location` is the position of the node's border box measured from the parent's scroll origin
      * (logical start edge): callers pass coordinates that are mirrored for RTL.
      */
-    public static function computeScrollableOverflowContribution(
+    public static inline function computeScrollableOverflowContribution(
         location:Point,
+        size:Size,
+        scrollableOverflowRect:Rect,
+        overflow:PointOf<Overflow>,
+        contain:Contain,
+        parentIsScrollContainer:Bool
+    ):Rect {
+        return contributionAt(location.x, location.y, size, scrollableOverflowRect, overflow, contain, parentIsScrollContainer);
+    }
+
+    /** `computeScrollableOverflowContribution` with the location as two values (no `Point` to allocate) */
+    public static function contributionAt(
+        locationX:Float,
+        locationY:Float,
         size:Size,
         scrollableOverflowRect:Rect,
         overflow:PointOf<Overflow>,
@@ -47,10 +60,10 @@ class ScrollableOverflow {
         final startExtentY = propagatesY ? Sys.f32Min(0.0, scrollableOverflowRect.top) : 0.0;
 
         final contribution = new Rect(
-            location.x + startExtentX,
-            location.x + endExtentWidth,
-            location.y + startExtentY,
-            location.y + endExtentHeight
+            locationX + startExtentX,
+            locationX + endExtentWidth,
+            locationY + startExtentY,
+            locationY + endExtentHeight
         );
 
         final isWhollyUnreachable = contribution.right <= 0.0 || contribution.bottom <= 0.0;

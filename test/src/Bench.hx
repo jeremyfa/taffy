@@ -35,18 +35,33 @@ class Bench {
             tree.computeLayoutWithMeasure(root, available, measure);
         }
         final iterations = 200;
+        final volumeStart = allocationVolume();
         final start = haxe.Timer.stamp();
         for (_ in 0...iterations) {
             markAllDirty(tree, root);
             tree.computeLayoutWithMeasure(root, available, measure);
         }
         final elapsed = haxe.Timer.stamp() - start;
+        final volumeFull = allocationVolume() - volumeStart;
         final cachedStart = haxe.Timer.stamp();
         for (_ in 0...iterations) {
             tree.computeLayoutWithMeasure(root, available, measure);
         }
         final cachedElapsed = haxe.Timer.stamp() - cachedStart;
-        trace('nodes: ${tree.totalNodeCount()}, full relayout: ${Math.round(elapsed / iterations * 100000) / 100} ms, cached: ${Math.round(cachedElapsed / iterations * 100000) / 100} ms');
+        final volumeCached = allocationVolume() - volumeStart - volumeFull;
+        var line = 'nodes: ${tree.totalNodeCount()}, full relayout: ${Math.round(elapsed / iterations * 100000) / 100} ms, cached: ${Math.round(cachedElapsed / iterations * 100000) / 100} ms';
+        if (volumeFull >= 0)
+            line += ', allocated per full relayout: ${Math.round(volumeFull / iterations / 1024)} KiB, per cached: ${Math.round(volumeCached / iterations / 1024 * 10) / 10} KiB';
+        trace(line);
+    }
+
+    /** Bytes allocated so far (hxcpp fork with `memInfo64(117)`), -1 elsewhere */
+    static function allocationVolume():Float {
+        #if cpp
+        return cpp.vm.Gc.memInfo64(117);
+        #else
+        return -1;
+        #end
     }
 
     static function markAllDirty(tree:TaffyTree<Int>, node:NodeId):Void {

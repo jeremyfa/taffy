@@ -56,29 +56,30 @@ class Leaf {
         final border = style.border.resolveOrZero(parentSize.width);
         final paddingBorder = padding.add(border);
         final pbSum = paddingBorder.sumAxes();
-        final boxSizingAdjustment = style.boxSizing == ContentBox ? pbSum : Size.ZERO;
+        // Intermediate values are inline (single constructors) and allocate nothing
+        final contentBox = style.boxSizing == ContentBox;
+        final boxSizingAdjustment = new Size(contentBox ? pbSum.width : 0.0, contentBox ? pbSum.height : 0.0);
 
         // Resolve node's preferred/min/max sizes (width/heights) against the available space (percentages resolve to pixel values)
         // For ContentSize mode, we pretend that the node has no size styles as these should be ignored.
-        var nodeSize:SizeOpt;
-        var nodeMinSize:SizeOpt;
-        var nodeMaxSize:SizeOpt;
-        var aspectRatio:OptionalFloat;
-        switch sizingMode {
-            case ContentSize:
-                nodeSize = knownDimensions;
-                nodeMinSize = SizeOpt.NONE;
-                nodeMaxSize = SizeOpt.NONE;
-                aspectRatio = OptionalFloat.NONE;
-            case InherentSize:
-                aspectRatio = style.aspectRatio;
-                final styleSize = style.size.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-                final styleMinSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-                final styleMaxSize = style.maxSize.maybeResolve(parentSize).maybeAddSize(boxSizingAdjustment);
-                nodeSize = knownDimensions.or(styleSize);
-                nodeMinSize = styleMinSize;
-                nodeMaxSize = styleMaxSize;
-        }
+        // (The style sizes are resolved in both modes, and only used under InherentSize.)
+        final inherentSize = sizingMode == InherentSize;
+        final aspectRatio:OptionalFloat = inherentSize ? style.aspectRatio : OptionalFloat.NONE;
+        final styleSize = style.size.maybeResolve(parentSize).maybeApplyAspectRatio(style.aspectRatio).maybeAddSize(boxSizingAdjustment);
+        final styleMinSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(style.aspectRatio).maybeAddSize(boxSizingAdjustment);
+        final styleMaxSize = style.maxSize.maybeResolve(parentSize).maybeAddSize(boxSizingAdjustment);
+        final nodeSize = new SizeOpt(
+            inherentSize ? knownDimensions.width.or(styleSize.width) : knownDimensions.width,
+            inherentSize ? knownDimensions.height.or(styleSize.height) : knownDimensions.height
+        );
+        final nodeMinSize = new SizeOpt(
+            inherentSize ? styleMinSize.width : OptionalFloat.NONE,
+            inherentSize ? styleMinSize.height : OptionalFloat.NONE
+        );
+        final nodeMaxSize = new SizeOpt(
+            inherentSize ? styleMaxSize.width : OptionalFloat.NONE,
+            inherentSize ? styleMaxSize.height : OptionalFloat.NONE
+        );
 
         // Scrollbar gutters are reserved when the `overflow` property is set to `Overflow.Scroll`.
         // However, the axis are switched (transposed) because a node that scrolls vertically needs
@@ -149,11 +150,10 @@ class Leaf {
             .or(nodeSize)
             .unwrapOr(measuredSize.add(contentBoxInset.sumAxes()))
             .maybeClamp(nodeMinSize, nodeMaxSize);
-        var size = new Size(
+        final size = new Size(
             clampedSize.width,
             Sys.f32Max(clampedSize.height, aspectRatio.isSome() ? clampedSize.width / aspectRatio.unwrap() : 0.0)
-        );
-        size = size.maybeMax(paddingBorder.sumAxes().toOptions());
+        ).maybeMax(paddingBorder.sumAxes().toOptions());
 
         // A scroll container's own padding at the end of the content is part of its scrollable
         // overflow region, so it is included in the overflow rect. Boxes that are not scroll

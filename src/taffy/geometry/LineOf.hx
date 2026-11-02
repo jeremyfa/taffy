@@ -10,6 +10,7 @@ package taffy.geometry;
  * Immutable: every operation returns a new instance.
  */
 @:structInit
+@:generic
 class LineOf<T> {
 
     /** The start position of a line */

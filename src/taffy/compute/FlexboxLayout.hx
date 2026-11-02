@@ -78,12 +78,62 @@ private class FinalPassState {
 }
 
 /**
+ * Per call objects of the flexbox algorithm, reused between calls. Containers nest (an item is
+ * measured while its container's items are alive), so there is one scratch per nesting level
+ * (see `FlexboxLayout.computePreliminary`). Nothing in it outlives the call that uses it.
+ */
+private class FlexScratch {
+
+    /** The flex items of the container */
+    public final items:Array<FlexItem> = [];
+
+    /** The algorithm constants of the container */
+    public final constants:AlgoConstants = new AlgoConstants();
+
+    /** The line of a single-line container */
+    public final singleLine:FlexLine = new FlexLine(null);
+
+    /** The lines of a single-line container (`[singleLine]`) */
+    public final singleLineArray:Array<FlexLine> = [];
+
+    public function new() {
+        singleLineArray.push(singleLine);
+    }
+
+    /** `[new FlexLine(items)]`, reusing the line */
+    public inline function singleLineOf(items:Array<FlexItem>):Array<FlexLine> {
+        singleLine.items = items;
+        singleLine.crossSize = 0.0;
+        singleLine.offsetCross = 0.0;
+        return singleLineArray;
+    }
+
+}
+
+/**
  * Computes the [flexbox](https://css-tricks.com/snippets/css/a-guide-to-flexbox/) layout algorithm
  * according to the [spec](https://www.w3.org/TR/css-flexbox-1/)
  */
 class FlexboxLayout {
 
     static final FALSE_LINE:LineOf<Bool> = new LineOf<Bool>(false, false);
+
+    /** The scratch objects of each nesting level (see `computePreliminary`) */
+    static final scratches:Array<FlexScratch> = [];
+
+    /** The nesting level of the next `computePreliminary` call */
+    static var scratchLevel:Int = 0;
+
+    /**
+     * The flex items of every container being laid out, as a stack: a container takes its items
+     * from `itemPoolTop` and gives them back when it returns (nested containers take theirs above).
+     */
+    static final itemPool:Array<FlexItem> = [];
+
+    static var itemPoolTop:Int = 0;
+
+    /** The `marginIsAuto` of the items without auto margins (shared, it is never mutated) */
+    static final NO_AUTO_MARGINS:RectOf<Bool> = new RectOf<Bool>(false, false, false, false);
 
     /** Computes the layout of a box according to the flexbox algorithm */
     public static function computeFlexboxLayout(tree:LayoutFlexboxContainer, node:NodeId, inputs:LayoutInput):LayoutOutput {
@@ -98,19 +148,22 @@ class FlexboxLayout {
         final padding = style.padding.resolveOrZero(parentSize.width);
         final border = style.border.resolveOrZero(parentSize.width);
         final paddingBorderSum = padding.sumAxes().add(border.sumAxes());
-        final boxSizingAdjustment = style.boxSizing == BoxSizing.ContentBox ? paddingBorderSum : Size.ZERO;
+        final contentBox = style.boxSizing == BoxSizing.ContentBox;
+        final boxSizingAdjustment = new Size(contentBox ? paddingBorderSum.width : 0.0, contentBox ? paddingBorderSum.height : 0.0);
 
         final minSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
         final maxSize = style.maxSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-        final clampedStyleSize = if (inputs.sizingMode == SizingMode.InherentSize) {
-            style.size.maybeResolve(parentSize)
-                .maybeApplyAspectRatio(aspectRatio)
-                .maybeAddSize(boxSizingAdjustment)
-                .maybeClamp(minSize, maxSize);
-        }
-        else {
-            SizeOpt.NONE;
-        }
+        // Under `InherentSize` only (one object, which does not escape)
+        final inherentSize = inputs.sizingMode == SizingMode.InherentSize;
+        final styleSize = style.size
+            .maybeResolve(parentSize)
+            .maybeApplyAspectRatio(aspectRatio)
+            .maybeAddSize(boxSizingAdjustment)
+            .maybeClamp(minSize, maxSize);
+        final clampedStyleSize = new SizeOpt(
+            inherentSize ? styleSize.width : OptionalFloat.NONE,
+            inherentSize ? styleSize.height : OptionalFloat.NONE
+        );
 
         // If both min and max in a given axis are set and max <= min then this determines the size in that axis
         final minMaxDefiniteSize = new SizeOpt(
@@ -119,7 +172,8 @@ class FlexboxLayout {
         );
 
         // The size of the container should be floored by the padding and border
-        final styledBasedKnownDimensions = knownDimensions.or(minMaxDefiniteSize.or(clampedStyleSize).maybeMaxSize(paddingBorderSum));
+        final styledKnown = knownDimensions.or(minMaxDefiniteSize.or(clampedStyleSize).maybeMaxSize(paddingBorderSum));
+        final styledBasedKnownDimensions = SizeOpt.shared(styledKnown.width, styledKnown.height);
 
         // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
         // is ComputeSize (and thus the container's size is all that we're interested in)
@@ -140,12 +194,12 @@ class FlexboxLayout {
 
         // Normalize the definiteness flags: they only apply to dimensions which were passed in as known
         // by the parent. Dimensions resolved from the node's own style are always definite.
-        final knownDimensionsAreDefinite = new SizeOf<Bool>(
+        final knownDimensionsAreDefinite = boolSize(
             inputs.knownDimensionsAreDefinite.width || knownDimensions.width.isNone(),
             inputs.knownDimensionsAreDefinite.height || knownDimensions.height.isNone()
         );
 
-        final output = computePreliminary(tree, node, new LayoutInput(
+        final output = computePreliminary(tree, node, LayoutInput.acquire(
             inputs.runMode,
             inputs.sizingMode,
             inputs.axis,
@@ -155,6 +209,7 @@ class FlexboxLayout {
             inputs.availableSpace,
             inputs.verticalMarginsAreCollapsible
         ));
+        LayoutInput.release();
 
         // Layout containment suppresses the box's baseline for baseline-alignment purposes
         if (contain.suppressesBaseline()) {
@@ -168,14 +223,33 @@ class FlexboxLayout {
         return (min.isSome() && max.isSome() && max.unwrap() <= min.unwrap()) ? min : OptionalFloat.NONE;
     }
 
-    /** Compute a preliminary size for an item */
+    /**
+     * Compute a preliminary size for an item.
+     *
+     * Takes the scratch objects of the current nesting level and the items above the pool top, and
+     * gives them back on return. If a call throws, they are not given back: the next calls use
+     * fresh levels and items above them, which stays correct.
+     */
     static function computePreliminary(tree:LayoutFlexboxContainer, node:NodeId, inputs:LayoutInput):LayoutOutput {
+        final level = scratchLevel;
+        final itemMark = itemPoolTop;
+        if (level == scratches.length)
+            scratches.push(new FlexScratch());
+        scratchLevel = level + 1;
+        final output = computePreliminaryWith(tree, node, inputs, scratches[level]);
+        scratchLevel = level;
+        itemPoolTop = itemMark;
+        return output;
+    }
+
+    static function computePreliminaryWith(tree:LayoutFlexboxContainer, node:NodeId, inputs:LayoutInput, scratch:FlexScratch):LayoutOutput {
         final knownDimensions = inputs.knownDimensions;
         final parentSize = inputs.parentSize;
         final runMode = inputs.runMode;
 
         // Define some general constants we will need for the remainder of the algorithm.
         final constants = computeConstants(
+            scratch.constants,
             tree.getFlexboxContainerStyle(node),
             knownDimensions,
             inputs.knownDimensionsAreDefinite,
@@ -188,7 +262,7 @@ class FlexboxLayout {
         // 9.1. Initial Setup
 
         // 1. Generate anonymous flex items as described in §4 Flex Items.
-        final flexItems = generateAnonymousFlexItems(tree, node, constants);
+        final flexItems = generateAnonymousFlexItems(tree, node, constants, scratch.items);
 
         // 9.2. Line Length Determination
 
@@ -208,7 +282,7 @@ class FlexboxLayout {
             collectBalancedFlexLines(constants, availableSpace, flexItems);
         }
         else {
-            collectFlexLines(constants, availableSpace, flexItems);
+            collectFlexLines(constants, availableSpace, flexItems, scratch);
         }
 
         // If container size is undefined, determine the container's main size
@@ -382,6 +456,7 @@ class FlexboxLayout {
 
     /** Compute constants that can be reused during the flexbox algorithm. */
     static function computeConstants(
+        c:AlgoConstants,
         style:Style,
         knownDimensions:SizeOpt,
         knownDimensionsAreDefinite:SizeOf<Bool>,
@@ -397,11 +472,14 @@ class FlexboxLayout {
         final isBalance = flexWrap.isBalance();
         final lineCount:Null<Int> = isWrap ? Sys.imax(style.flexLineCount, 1) : null;
 
+        // The values stored in the constants are shared when zero or absent (the common case);
+        // intermediate values are inline and allocate nothing
         final aspectRatio = style.aspectRatio;
         final padding = style.padding.resolveOrZero(parentSize.width);
         final border = style.border.resolveOrZero(parentSize.width);
         final paddingBorderSum = padding.sumAxes().add(border.sumAxes());
-        final boxSizingAdjustment = style.boxSizing == BoxSizing.ContentBox ? paddingBorderSum : Size.ZERO;
+        final contentBox = style.boxSizing == BoxSizing.ContentBox;
+        final boxSizingAdjustment = new Size(contentBox ? paddingBorderSum.width : 0.0, contentBox ? paddingBorderSum.height : 0.0);
 
         // `normal` behaves as `stretch` for flex items. This is resolved once here so that
         // items with an `align_self` of `None`, which defer to this value, are also resolved.
@@ -417,23 +495,22 @@ class FlexboxLayout {
         // However, the axis are switched (transposed) because a node that scrolls vertically needs
         // *horizontal* space to be reserved for a scrollbar
         final overflow = style.overflow;
-        final scrollbarGutter = new Point(
-            overflow.y == Overflow.Scroll ? style.scrollbarWidth : 0.0,
-            overflow.x == Overflow.Scroll ? style.scrollbarWidth : 0.0
-        );
+        final gutterX = overflow.y == Overflow.Scroll ? style.scrollbarWidth : 0.0;
+        final gutterY = overflow.x == Overflow.Scroll ? style.scrollbarWidth : 0.0;
+        final scrollbarGutter = (Size.isPositiveZero(gutterX) && Size.isPositiveZero(gutterY)) ? Point.ZERO : new Point(gutterX, gutterY);
         final isScrollContainer = overflow.x.isScrollContainer() || overflow.y.isScrollContainer();
-        var contentBoxInset = padding.add(border);
-        contentBoxInset = contentBoxInset.withBottom(contentBoxInset.bottom + scrollbarGutter.y);
-
-        switch layoutDirection {
-            case Direction.Ltr:
-                contentBoxInset = contentBoxInset.withRight(contentBoxInset.right + scrollbarGutter.x);
-            case Direction.Rtl:
-                contentBoxInset = contentBoxInset.withLeft(contentBoxInset.left + scrollbarGutter.x);
-        }
+        // `padding + border`, with the gutter added to the bottom and to the end side
+        final paddingBorder = padding.add(border);
+        final isLtr = layoutDirection == Direction.Ltr;
+        final insetLeft = isLtr ? paddingBorder.left : paddingBorder.left + gutterX;
+        final insetRight = isLtr ? paddingBorder.right + gutterX : paddingBorder.right;
+        final insetTop = paddingBorder.top;
+        final insetBottom = paddingBorder.bottom + gutterY;
+        final contentBoxInset = Rect.shared(insetLeft, insetRight, insetTop, insetBottom);
 
         final nodeOuterSize = knownDimensions;
-        final nodeInnerSize = nodeOuterSize.maybeSubSize(contentBoxInset.sumAxes());
+        final innerSize = nodeOuterSize.maybeSubSize(new Size(insetLeft + insetRight, insetTop + insetBottom));
+        final nodeInnerSize = SizeOpt.shared(innerSize.width, innerSize.height);
         final knownMainSizeIsDefinite = knownDimensionsAreDefinite.main(dir);
         final hasDefiniteMainSize = knownMainSizeIsDefinite && knownDimensions.main(dir).isSome();
         final hasDefiniteCrossSize = knownDimensionsAreDefinite.cross(dir) && knownDimensions.cross(dir).isSome();
@@ -442,9 +519,12 @@ class FlexboxLayout {
             nodeInnerSize.width.isSome() ? nodeInnerSize.width : OptionalFloat.some(0.0),
             nodeInnerSize.height.isSome() ? nodeInnerSize.height : OptionalFloat.some(0.0)
         );
-        final gap = style.gap.resolveOrZero(gapContext);
+        final resolvedGap = style.gap.resolveOrZero(gapContext);
+        final gap = Size.shared(resolvedGap.width, resolvedGap.height);
+        final minSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
+        final maxSize = style.maxSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
 
-        final c = new AlgoConstants();
+        // Every field is set (the constants object is reused)
         c.dir = dir;
         c.layoutDirection = layoutDirection;
         c.isRow = isRow;
@@ -453,9 +533,9 @@ class FlexboxLayout {
         c.isWrapReverse = isWrapReverse;
         c.isBalance = isBalance;
         c.lineCount = lineCount;
-        c.minSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-        c.maxSize = style.maxSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-        c.border = border;
+        c.minSize = SizeOpt.shared(minSize.width, minSize.height);
+        c.maxSize = SizeOpt.shared(maxSize.width, maxSize.height);
+        c.border = Rect.shared(border.left, border.right, border.top, border.bottom);
         c.gap = gap;
         c.contentBoxInset = contentBoxInset;
         c.scrollbarGutter = scrollbarGutter;
@@ -478,7 +558,7 @@ class FlexboxLayout {
      * Resolve a `position: relative` item's inset to a single offset in the container's flex axes,
      * accounting for flex direction and writing direction.
      */
-    static function resolveRelativeInset(inset:RectOpt, constants:AlgoConstants):Size {
+    static inline function resolveRelativeInset(inset:RectOpt, constants:AlgoConstants):Size {
         final direction = constants.dir;
         final isRtlRow = direction.isRow() && constants.layoutDirection.isRtl();
         final isRtlColumn = direction.isColumn() && constants.layoutDirection.isRtl();
@@ -498,7 +578,9 @@ class FlexboxLayout {
         else {
             crossStart.isSome() ? crossStart.unwrap() : (crossEnd.isSome() ? -crossEnd.unwrap() : 0.0);
         };
-        return Size.ZERO.withMain(direction, main).withCross(direction, cross);
+        // `Size.ZERO.withMain(direction, main).withCross(direction, cross)`, shared when zero
+        final isRow = direction.isRow();
+        return Size.shared(isRow ? main : cross, isRow ? cross : main);
     }
 
     /**
@@ -508,7 +590,7 @@ class FlexboxLayout {
      *
      * - [**Generate anonymous flex items**](https://www.w3.org/TR/css-flexbox-1/#algo-anon-box) as described in [§4 Flex Items](https://www.w3.org/TR/css-flexbox-1/#flex-items).
      */
-    static function generateAnonymousFlexItems(tree:LayoutFlexboxContainer, node:NodeId, constants:AlgoConstants):Array<FlexItem> {
+    static function generateAnonymousFlexItems(tree:LayoutFlexboxContainer, node:NodeId, constants:AlgoConstants, items:Array<FlexItem>):Array<FlexItem> {
         // Percentage sizes of items resolve against the container's inner size, but only if that size
         // is definite. A known main size which is derived from the container's own content is treated
         // as indefinite here.
@@ -516,7 +598,7 @@ class FlexboxLayout {
             ? constants.nodeInnerSize
             : constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.NONE);
 
-        final items:Array<FlexItem> = [];
+        items.resize(0);
         final count = tree.childCount(node);
         for (index in 0...count) {
             final child = tree.getChildId(node, index);
@@ -526,11 +608,15 @@ class FlexboxLayout {
             if (childStyle.boxGenerationMode() == BoxGenerationMode.None)
                 continue;
 
+            // The geometry stored in the item is shared when it is zero or absent (the common case);
+            // intermediate values are inline and allocate nothing
             final aspectRatio = childStyle.aspectRatio;
-            final padding = childStyle.padding.resolveOrZero(constants.nodeInnerSize.width);
-            final border = childStyle.border.resolveOrZero(constants.nodeInnerSize.width);
-            final pbSum = padding.add(border).sumAxes();
-            final boxSizingAdjustment = childStyle.boxSizing == BoxSizing.ContentBox ? pbSum : Size.ZERO;
+            final innerWidth = constants.nodeInnerSize.width;
+            final p = childStyle.padding.resolveOrZero(innerWidth);
+            final b = childStyle.border.resolveOrZero(innerWidth);
+            final pbSum = p.add(b).sumAxes();
+            final contentBox = childStyle.boxSizing == BoxSizing.ContentBox;
+            final boxSizingAdjustment = new Size(contentBox ? pbSum.width : 0.0, contentBox ? pbSum.height : 0.0);
 
             final relativeInset = if (childStyle.position == Position.Relative) {
                 final inset = childStyle.inset.maybeResolveBySize(constants.nodeInnerSize);
@@ -541,19 +627,30 @@ class FlexboxLayout {
             };
 
             final m = childStyle.margin;
-            final item = new FlexItem(
+            final size = childStyle.size.maybeResolve(percentResolutionSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
+            final minSize = childStyle.minSize.maybeResolve(percentResolutionSize).maybeAddSize(boxSizingAdjustment);
+            final maxSize = childStyle.maxSize.maybeResolve(percentResolutionSize).maybeAddSize(boxSizingAdjustment);
+            final margin = m.resolveOrZero(innerWidth);
+            final leftAuto = m.left.isAuto();
+            final rightAuto = m.right.isAuto();
+            final topAuto = m.top.isAuto();
+            final bottomAuto = m.bottom.isAuto();
+            final poolIndex = itemPoolTop++;
+            if (poolIndex == itemPool.length)
+                itemPool.push(new FlexItem());
+            final item = itemPool[poolIndex].reset(
                 child,
                 index,
-                childStyle.size.maybeResolve(percentResolutionSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment),
+                SizeOpt.shared(size.width, size.height),
                 childStyle.size,
-                childStyle.minSize.maybeResolve(percentResolutionSize).maybeAddSize(boxSizingAdjustment),
-                childStyle.maxSize.maybeResolve(percentResolutionSize).maybeAddSize(boxSizingAdjustment),
+                SizeOpt.shared(minSize.width, minSize.height),
+                SizeOpt.shared(maxSize.width, maxSize.height),
                 aspectRatio,
                 relativeInset,
-                m.resolveOrZero(constants.nodeInnerSize.width),
-                new RectOf<Bool>(m.left.isAuto(), m.right.isAuto(), m.top.isAuto(), m.bottom.isAuto()),
-                padding,
-                border,
+                Rect.shared(margin.left, margin.right, margin.top, margin.bottom),
+                (leftAuto || rightAuto || topAuto || bottomAuto) ? new RectOf<Bool>(leftAuto, rightAuto, topAuto, bottomAuto) : NO_AUTO_MARGINS,
+                Rect.shared(p.left, p.right, p.top, p.bottom),
+                Rect.shared(b.left, b.right, b.top, b.bottom),
                 resolveNormalAlignment(childStyle.alignSelf != null ? (childStyle.alignSelf : AlignItems) : constants.alignItems)
                     .resolveSelfRelative(childStyle.direction, constants.layoutDirection, constants.isColumn),
                 childStyle.overflow,
@@ -638,12 +735,12 @@ class FlexboxLayout {
     ):Void {
         final dir = constants.dir;
 
+        // Parent size for child sizing (the same for every child)
+        final crossAxisParentSize = constants.nodeInnerSize.cross(dir);
+        final childParentSize = SizeOpt.fromCross(dir, crossAxisParentSize);
+
         for (child in flexItems) {
             final childStyle = tree.getFlexboxChildStyle(child.node);
-
-            // Parent size for child sizing
-            final crossAxisParentSize = constants.nodeInnerSize.cross(dir);
-            final childParentSize = SizeOpt.fromCross(dir, crossAxisParentSize);
 
             // Available space for child sizing (excluding the child's margins)
             // Min/max sizes transferred through the aspect ratio are taken into account here
@@ -667,25 +764,22 @@ class FlexboxLayout {
                     );
             }
 
-            // Known dimensions for child sizing
+            // Known dimensions for child sizing: the main size is unknown, and the definite cross size is
+            // clamped by the cross min/max sizes so that sizes transferred through an intrinsic aspect ratio
+            // (e.g. for replaced elements) are based on the used cross size.
+            // (Computed as one value, then one object: `child.size.withMain(dir, None).withCross(...)`.)
             var childCrossSizeIsDefinite = child.size.cross(dir).isSome();
-            var childKnownDimensions = child.size.withMain(dir, OptionalFloat.NONE);
-            // Clamp the definite cross size by the cross min/max sizes so that sizes
-            // transferred through an intrinsic aspect ratio (e.g. for replaced elements)
-            // are based on the used cross size.
-            childKnownDimensions = childKnownDimensions.withCross(
-                dir,
-                childKnownDimensions.cross(dir).maybeClamp(transferredMinSize.cross(dir), transferredMaxSize.cross(dir))
-            );
+            var childKnownCross = child.size.cross(dir).maybeClamp(transferredMinSize.cross(dir), transferredMaxSize.cross(dir));
             if (child.alignSelf == AlignItems.STRETCH
                 && !child.marginIsAuto.crossStart(constants.dir)
                 && !child.marginIsAuto.crossEnd(constants.dir)
-                && childKnownDimensions.cross(dir).isNone()) {
-                childKnownDimensions = childKnownDimensions.withCross(dir, crossAxisAvailableSpace.intoOption());
+                && childKnownCross.isNone()) {
+                childKnownCross = crossAxisAvailableSpace.intoOption();
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
                 childCrossSizeIsDefinite = !constants.isWrap && constants.hasDefiniteCrossSize && crossAxisParentSize.isSome();
             }
+            final childKnownDimensions = childKnownCross.isNone() ? SizeOpt.NONE : SizeOpt.fromCross(dir, childKnownCross);
 
             // Percentage padding and border resolve against the container's inline size (its width),
             // whichever axis is the main axis
@@ -779,8 +873,8 @@ class FlexboxLayout {
             final hypotheticalInnerSize = child.flexBasis.maybeClampF(OptionalFloat.some(hypotheticalInnerMinMain), transferredMaxSize.main(constants.dir));
             final hypotheticalOuterSize = hypotheticalInnerSize + child.margin.mainAxisSum(constants.dir);
 
-            child.hypotheticalInnerSize = child.hypotheticalInnerSize.withMain(constants.dir, hypotheticalInnerSize);
-            child.hypotheticalOuterSize = child.hypotheticalOuterSize.withMain(constants.dir, hypotheticalOuterSize);
+            child.hypotheticalInnerSize.setMain(constants.dir, hypotheticalInnerSize);
+            child.hypotheticalOuterSize.setMain(constants.dir, hypotheticalOuterSize);
         }
     }
 
@@ -938,12 +1032,12 @@ class FlexboxLayout {
      *
      *       **Note that the "collect as many" line will collect zero-sized flex items onto the end of the previous line even if the last non-zero item exactly "filled up" the line**.
      */
-    static function collectFlexLines(constants:AlgoConstants, availableSpace:SizeAvail, flexItems:Array<FlexItem>):Array<FlexLine> {
+    static function collectFlexLines(constants:AlgoConstants, availableSpace:SizeAvail, flexItems:Array<FlexItem>, scratch:FlexScratch):Array<FlexLine> {
         // Wrapping into multiple lines requires a definite main size. If the container's known main size
         // is derived from its own content (and is thus indefinite) then all items are collected into a
         // single flex line, matching how the container was sized under a min/max-content constraint.
         if (!constants.isWrap || !constants.knownMainSizeIsDefinite) {
-            return [new FlexLine(flexItems)];
+            return scratch.singleLineOf(flexItems);
         }
 
         final mainAxisAvailableSpace = wrapMainAxisAvailableSpace(constants, availableSpace);
@@ -952,7 +1046,7 @@ class FlexboxLayout {
             // If we're sizing under a max-content constraint then the flex items will never wrap
             // (at least for now - future extensions to the CSS spec may add provisions for forced wrap points)
             case MaxContent:
-                return [new FlexLine(flexItems)];
+                return scratch.singleLineOf(flexItems);
 
             // If flex-wrap is Wrap and we're sizing under a min-content constraint, then we take every possible wrapping opportunity
             // and place each item in it's own line
@@ -1080,7 +1174,18 @@ class FlexboxLayout {
         final isStretched = !hasCrossAutoMargins && (crossSize.isStretch() || (item.alignSelf == AlignItems.STRETCH && crossSize.isAuto()));
         final crossIsDefinite = isStretched || item.size.cross(dir).isSome() || (!dir.isRow() && constants.crossAxisAvailableSpaceIsDefinite);
 
-        return dir.isRow() ? new SizeOf<Bool>(mainIsDefinite, crossIsDefinite) : new SizeOf<Bool>(crossIsDefinite, mainIsDefinite);
+        return dir.isRow() ? boolSize(mainIsDefinite, crossIsDefinite) : boolSize(crossIsDefinite, mainIsDefinite);
+    }
+
+    /** The four values of a `SizeOf<Bool>` (shared, never mutated) */
+    static final BOOL_SIZE_FF:SizeOf<Bool> = new SizeOf<Bool>(false, false);
+    static final BOOL_SIZE_FT:SizeOf<Bool> = new SizeOf<Bool>(false, true);
+    static final BOOL_SIZE_TF:SizeOf<Bool> = new SizeOf<Bool>(true, false);
+    static final BOOL_SIZE_TT:SizeOf<Bool> = new SizeOf<Bool>(true, true);
+
+    /** `new SizeOf<Bool>(width, height)`, shared */
+    static inline function boolSize(width:Bool, height:Bool):SizeOf<Bool> {
+        return width ? (height ? BOOL_SIZE_TT : BOOL_SIZE_TF) : (height ? BOOL_SIZE_FT : BOOL_SIZE_FF);
     }
 
     /** The main length an item contributes to the line it is in, for the purpose of sizing the container */
@@ -1295,8 +1400,8 @@ class FlexboxLayout {
                             0.0;
                         };
                         final size = item.flexBasis + flexContribution;
-                        item.outerTargetSize = item.outerTargetSize.withMain(constants.dir, size);
-                        item.targetSize = item.targetSize.withMain(constants.dir, size);
+                        item.outerTargetSize.setMain(constants.dir, size);
+                        item.targetSize.setMain(constants.dir, size);
                         itemMainSizeSum += size;
                     }
 
@@ -1442,7 +1547,7 @@ class FlexboxLayout {
 
         for (child in line.items) {
             final innerTargetSize = child.hypotheticalInnerSize.main(dir);
-            child.targetSize = child.targetSize.withMain(dir, innerTargetSize);
+            child.targetSize.setMain(dir, innerTargetSize);
 
             if (exactlySized
                 || (child.flexGrow == 0.0 && child.flexShrink == 0.0)
@@ -1450,7 +1555,7 @@ class FlexboxLayout {
                 || (shrinking && child.flexBasis < child.hypotheticalInnerSize.main(dir))) {
                 child.frozen = true;
                 final outerTargetSize = innerTargetSize + child.margin.mainAxisSum(dir);
-                child.outerTargetSize = child.outerTargetSize.withMain(dir, outerTargetSize);
+                child.outerTargetSize.setMain(dir, outerTargetSize);
             }
         }
 
@@ -1534,7 +1639,7 @@ class FlexboxLayout {
             if (isNormal(freeSpace)) {
                 if (growing && sumFlexGrow > 0.0) {
                     for (child in unfrozen) {
-                        child.targetSize = child.targetSize.withMain(dir, child.flexBasis + freeSpace * (child.flexGrow / sumFlexGrow));
+                        child.targetSize.setMain(dir, child.flexBasis + freeSpace * (child.flexGrow / sumFlexGrow));
                     }
                 }
                 else if (shrinking && sumFlexShrink > 0.0) {
@@ -1545,7 +1650,7 @@ class FlexboxLayout {
                     if (sumScaledShrinkFactor > 0.0) {
                         for (child in unfrozen) {
                             final scaledShrinkFactor = child.innerFlexBasis * child.flexShrink;
-                            child.targetSize = child.targetSize.withMain(dir, child.flexBasis + freeSpace * (scaledShrinkFactor / sumScaledShrinkFactor));
+                            child.targetSize.setMain(dir, child.flexBasis + freeSpace * (scaledShrinkFactor / sumScaledShrinkFactor));
                         }
                     }
                 }
@@ -1562,8 +1667,8 @@ class FlexboxLayout {
                 final maxMain = child.maxSize.main(dir);
                 final clamped = Sys.f32Max(child.targetSize.main(dir).maybeClampF(resolvedMinMain, maxMain), 0.0);
                 child.violation = clamped - child.targetSize.main(dir);
-                child.targetSize = child.targetSize.withMain(dir, clamped);
-                child.outerTargetSize = child.outerTargetSize.withMain(dir, child.targetSize.main(dir) + child.margin.mainAxisSum(dir));
+                child.targetSize.setMain(dir, clamped);
+                child.outerTargetSize.setMain(dir, child.targetSize.main(dir) + child.margin.mainAxisSum(dir));
 
                 totalViolation += child.violation;
             }
@@ -1647,7 +1752,7 @@ class FlexboxLayout {
                 childCross.unwrap();
             }
             else {
-                final output = tree.computeChildLayout(child.node, new LayoutInput(
+                final output = tree.computeChildLayout(child.node, LayoutInput.acquire(
                     RunMode.ComputeSize,
                     SizingMode.ContentSize,
                     RequestedAxis.fromAbsoluteAxis(dir.crossAxis()),
@@ -1663,12 +1768,13 @@ class FlexboxLayout {
                     ),
                     FALSE_LINE
                 ));
+                LayoutInput.release();
                 Sys.f32Max(output.size.getAbs(dir.crossAxis()).maybeClampF(transferredMinCross, transferredMaxCross), paddingBorderSum);
             };
             final childOuterCross = childInnerCross + child.margin.crossAxisSum(dir);
 
-            child.hypotheticalInnerSize = child.hypotheticalInnerSize.withCross(dir, childInnerCross);
-            child.hypotheticalOuterSize = child.hypotheticalOuterSize.withCross(dir, childOuterCross);
+            child.hypotheticalInnerSize.setCross(dir, childInnerCross);
+            child.hypotheticalOuterSize.setCross(dir, childOuterCross);
         }
     }
 
@@ -1704,7 +1810,7 @@ class FlexboxLayout {
                     continue;
                 }
 
-                final measuredSizeAndBaselines = tree.computeChildLayout(child.node, new LayoutInput(
+                final measuredSizeAndBaselines = tree.computeChildLayout(child.node, LayoutInput.acquire(
                     RunMode.PerformLayout,
                     SizingMode.ContentSize,
                     RequestedAxis.Both,
@@ -1721,6 +1827,7 @@ class FlexboxLayout {
                     ).maybeSubSize(child.margin.sumAxes()).maybeMaxSize(Size.ZERO),
                     FALSE_LINE
                 ));
+                LayoutInput.release();
 
                 final baseline = measuredSizeAndBaselines.baselines.first;
                 final height = measuredSizeAndBaselines.size.height;
@@ -1889,9 +1996,9 @@ class FlexboxLayout {
                 else {
                     child.hypotheticalInnerSize.cross(dir);
                 };
-                child.targetSize = child.targetSize.withCross(dir, crossTarget);
+                child.targetSize.setCross(dir, crossTarget);
 
-                child.outerTargetSize = child.outerTargetSize.withCross(dir, child.targetSize.cross(dir) + child.margin.crossAxisSum(dir));
+                child.outerTargetSize.setCross(dir, child.targetSize.cross(dir) + child.margin.crossAxisSum(dir));
             }
         }
     }
@@ -2177,7 +2284,7 @@ class FlexboxLayout {
         final layoutDirection = constants.layoutDirection;
         final definiteness = itemKnownDimensionDefiniteness(constants, item);
         final marginSum = item.margin.sumAxes();
-        final layoutOutput = tree.computeChildLayout(item.node, new LayoutInput(
+        final layoutOutput = tree.computeChildLayout(item.node, LayoutInput.acquire(
             RunMode.PerformLayout,
             SizingMode.ContentSize,
             RequestedAxis.Both,
@@ -2191,6 +2298,7 @@ class FlexboxLayout {
             ),
             FALSE_LINE
         ));
+        LayoutInput.release();
         final size = layoutOutput.size;
         final scrollableOverflowRect = layoutOutput.scrollableOverflowRect;
 
@@ -2259,12 +2367,8 @@ class FlexboxLayout {
             state.totalOffsetMain += item.offsetMain + item.margin.mainAxisSum(direction) + size.main(direction);
         }
 
-        final contributionLocation = if (layoutDirection.isRtl()) {
-            new Point(containerSize.width - (location.x + size.width) - border.right, location.y - border.top);
-        }
-        else {
-            new Point(location.x - border.left, location.y - border.top);
-        };
+        final isRtlLocation = layoutDirection.isRtl();
+        final contributionLocation = new Point(isRtlLocation ? containerSize.width - (location.x + size.width) - border.right : location.x - border.left, location.y - border.top);
         state.overflowRect = state.overflowRect.union(ScrollableOverflow.computeScrollableOverflowContribution(
             contributionLocation,
             size,

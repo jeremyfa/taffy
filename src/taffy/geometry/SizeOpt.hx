@@ -44,7 +44,8 @@ class SizeOpt {
 
     /** Creates a size with either the width or height set based on the provided `direction` */
     public static inline function fromCross(direction:FlexDirection, value:OptionalFloat):SizeOpt {
-        return direction.isRow() ? new SizeOpt(OptionalFloat.NONE, value) : new SizeOpt(value, OptionalFloat.NONE);
+        final isRow = direction.isRow();
+        return new SizeOpt(isRow ? OptionalFloat.NONE : value, isRow ? value : OptionalFloat.NONE);
     }
 
     /** Get either the width or height depending on the `AbsoluteAxis` passed in */
@@ -59,7 +60,8 @@ class SizeOpt {
 
     /** Return a copy with the given axis set to value */
     public inline function with(axis:AbstractAxis, value:OptionalFloat):SizeOpt {
-        return axis == Inline ? new SizeOpt(value, height) : new SizeOpt(width, value);
+        final inl = axis == Inline;
+        return new SizeOpt(inl ? value : width, inl ? height : value);
     }
 
     /** Swap width and height */
@@ -92,28 +94,34 @@ class SizeOpt {
 
     /** Return a copy with the main axis set to value */
     public inline function withMain(direction:FlexDirection, value:OptionalFloat):SizeOpt {
-        return direction.isRow() ? new SizeOpt(value, height) : new SizeOpt(width, value);
+        final isRow = direction.isRow();
+        return new SizeOpt(isRow ? value : width, isRow ? height : value);
     }
 
     /** Return a copy with the cross axis set to value */
     public inline function withCross(direction:FlexDirection, value:OptionalFloat):SizeOpt {
-        return direction.isRow() ? new SizeOpt(width, value) : new SizeOpt(value, height);
+        final isRow = direction.isRow();
+        return new SizeOpt(isRow ? width : value, isRow ? value : height);
     }
 
-    /** Applies aspect_ratio (if one is supplied) to the Size: if width is set but not height, height is width / ratio and vice versa */
-    public function maybeApplyAspectRatio(aspectRatio:OptionalFloat):SizeOpt {
-        if (aspectRatio.isNone())
-            return this;
-        final ratio:Float = aspectRatio.unwrap();
-        if (width.isSome() && height.isNone()) {
-            final w:Float = width.unwrap();
-            return new SizeOpt(OptionalFloat.some(w), OptionalFloat.some(w / ratio));
-        }
-        if (width.isNone() && height.isSome()) {
-            final h:Float = height.unwrap();
-            return new SizeOpt(OptionalFloat.some(h * ratio), OptionalFloat.some(h));
-        }
-        return this;
+    /**
+     * Applies aspect_ratio (if one is supplied) to the Size: if width is set but not height, height is width / ratio and vice versa.
+     * Inline with a single constructor so that a chain like `maybeResolve(...).maybeApplyAspectRatio(...).maybeAddSize(...)`
+     * allocates nothing when its result does not escape.
+     */
+    public inline function maybeApplyAspectRatio(aspectRatio:OptionalFloat):SizeOpt {
+        final w = width;
+        final h = height;
+        final hasRatio = aspectRatio.isSome();
+        return new SizeOpt(
+            (hasRatio && w.isNone() && h.isSome()) ? OptionalFloat.some(h.unwrap() * aspectRatio.unwrap()) : w,
+            (hasRatio && w.isSome() && h.isNone()) ? OptionalFloat.some(w.unwrap() / aspectRatio.unwrap()) : h
+        );
+    }
+
+    /** `new SizeOpt(width, height)`, or the shared `NONE` when both are absent (for results that are stored) */
+    public static inline function shared(width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        return (width.isNone() && height.isNone()) ? NONE : new SizeOpt(width, height);
     }
 
     /** Performs `Option::unwrap_or` on each component separately */

@@ -3,7 +3,7 @@ package;
 /**
  * Test runner: runs the hand written tests and the XML fixtures.
  *
- * Usage: `node bin/test.js [fixturesDir] [--category <name>] [--filter <substring>] [--verbose] [--failures <file>] [--no-unit] [--dump <file>]`
+ * Usage: `node bin/test.js [fixturesDir] [--category <name>] [--filter <substring>] [--verbose] [--failures <file>] [--no-unit] [--dump <file>] [--relayout-check]`
  *
  * The fixtures directory defaults to the `TAFFY_FIXTURES` environment variable, then to `fixtures`
  * (the small subset copied in this repository). It must contain one folder per category
@@ -37,6 +37,8 @@ class Main {
                 case "--dump":
                     dumpFile = args[++i];
                     XmlTests.dump = new StringBuf();
+                case "--relayout-check":
+                    XmlTests.relayoutCheck = true;
                 case _:
                     fixturesDir = arg;
             }

@@ -28,14 +28,25 @@ class CollapsibleMarginSet {
 
     /** Create a set from a single margin */
     public static inline function fromMargin(margin:Float):CollapsibleMarginSet {
-        return margin >= 0.0 ? new CollapsibleMarginSet(margin, 0.0) : new CollapsibleMarginSet(0.0, margin);
+        // One constructor, so that a set that does not escape allocates nothing
+        final isPositive = margin >= 0.0;
+        return new CollapsibleMarginSet(isPositive ? margin : 0.0, isPositive ? 0.0 : margin);
     }
 
     /** Collapse a single margin with this set */
     public inline function collapseWithMargin(margin:Float):CollapsibleMarginSet {
-        return margin >= 0.0
-            ? new CollapsibleMarginSet(Sys.f32Max(positive, margin), negative)
-            : new CollapsibleMarginSet(positive, Sys.f32Min(negative, margin));
+        final isPositive = margin >= 0.0;
+        return new CollapsibleMarginSet(isPositive ? Sys.f32Max(positive, margin) : positive, isPositive ? negative : Sys.f32Min(negative, margin));
+    }
+
+    /**
+     * A copy of this set to store, or the shared `ZERO` when both values are +0. For a set built
+     * inline (`a.collapseWithSet(b).share()`), only the stored object is allocated, if any.
+     */
+    public inline function share():CollapsibleMarginSet {
+        final p = positive;
+        final n = negative;
+        return (p == 0.0 && 1.0 / p > 0.0 && n == 0.0 && 1.0 / n > 0.0) ? ZERO : new CollapsibleMarginSet(p, n);
     }
 
     /** Collapse another margin set with this set */

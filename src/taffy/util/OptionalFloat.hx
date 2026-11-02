@@ -106,6 +106,7 @@ abstract OptionalFloat(Float) {
     }
 
     /** `f32::maybe_clamp(Option<f32>, Option<f32>) -> f32` */
+    @:noDebug
     public static function clampF(value:Float, min:OptionalFloat, max:OptionalFloat):Float {
         if (min.isSome() && max.isSome())
             return Sys.f32Max(Sys.f32Min(value, max.raw()), min.raw());

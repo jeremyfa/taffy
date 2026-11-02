@@ -13,7 +13,9 @@ import taffy.geometry.SizeAvail;
 /**
  * A struct containing the inputs constraints/hints for laying out a node, which are passed in by the parent.
  *
- * Immutable (Rust passes it by value).
+ * Immutable for its users (Rust passes it by value). The layout algorithms reuse the inputs they
+ * pass to a child once the child call returns (`acquire` / `release`), so a layout function must
+ * not keep a reference to its `inputs` after it returns.
  */
 @:structInit
 class LayoutInput {
@@ -31,37 +33,37 @@ class LayoutInput {
     );
 
     /** Whether we only need to know the Node's size, or whether we need to perform a full layout */
-    public final runMode:RunMode;
+    public var runMode(default, null):RunMode;
 
     /** Whether a Node's style sizes should be taken into account or ignored */
-    public final sizingMode:SizingMode;
+    public var sizingMode(default, null):SizingMode;
 
     /** Which axis we need the size of */
-    public final axis:RequestedAxis;
+    public var axis(default, null):RequestedAxis;
 
     /**
      * Known dimensions represent dimensions (width/height) which should be taken as fixed when performing layout.
      * Layout functions will be called with both known dimensions set for final layout.
      */
-    public final knownDimensions:SizeOpt;
+    public var knownDimensions(default, null):SizeOpt;
 
     /**
      * Whether each known dimension should be treated as a *definite* size when laying out the node's
      * own content. Ignored (treated as `true`) for axes where the corresponding known dimension is null.
      */
-    public final knownDimensionsAreDefinite:SizeOf<Bool>;
+    public var knownDimensionsAreDefinite(default, null):SizeOf<Bool>;
 
     /** Parent size dimensions are intended to be used for percentage resolution. */
-    public final parentSize:SizeOpt;
+    public var parentSize(default, null):SizeOpt;
 
     /**
      * Available space represents an amount of space to layout into, and is used as a soft constraint
      * for the purpose of wrapping. A definite available space is the space available to the node's border box.
      */
-    public final availableSpace:SizeAvail;
+    public var availableSpace(default, null):SizeAvail;
 
     /** Specific to CSS Block layout. Used for correctly computing margin collapsing. */
-    public final verticalMarginsAreCollapsible:LineOf<Bool>;
+    public var verticalMarginsAreCollapsible(default, null):LineOf<Bool>;
 
     public inline function new(
         runMode:RunMode,
@@ -81,6 +83,71 @@ class LayoutInput {
         this.parentSize = parentSize;
         this.availableSpace = availableSpace;
         this.verticalMarginsAreCollapsible = verticalMarginsAreCollapsible;
+    }
+
+    /**
+     * Inputs reused for child calls, one per nesting level: `acquire` takes the input at `poolDepth`,
+     * `release` gives it back once the child call that received it has returned (a child layout never
+     * keeps its inputs). If a call throws, the level is not given back and the next calls use fresh
+     * levels above it, which stays correct.
+     */
+    static final pool:Array<LayoutInput> = [];
+
+    static var poolDepth:Int = 0;
+
+    /**
+     * An input for a child call (internal to the layout algorithms): call `release()` right after
+     * the call that receives it returns, and do not use the input afterwards.
+     */
+    @:noCompletion
+    public static inline function acquire(
+        runMode:RunMode,
+        sizingMode:SizingMode,
+        axis:RequestedAxis,
+        knownDimensions:SizeOpt,
+        knownDimensionsAreDefinite:SizeOf<Bool>,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):LayoutInput {
+        final depth = poolDepth;
+        poolDepth = depth + 1;
+        return if (depth < pool.length) {
+            pool[depth].reset(runMode, sizingMode, axis, knownDimensions, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
+        }
+        else {
+            final input = new LayoutInput(runMode, sizingMode, axis, knownDimensions, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
+            pool.push(input);
+            input;
+        }
+    }
+
+    /** Give back the last input taken with `acquire` */
+    @:noCompletion
+    public static inline function release():Void {
+        poolDepth--;
+    }
+
+    /** Overwrite every field (inputs reused through `acquire`) */
+    inline function reset(
+        runMode:RunMode,
+        sizingMode:SizingMode,
+        axis:RequestedAxis,
+        knownDimensions:SizeOpt,
+        knownDimensionsAreDefinite:SizeOf<Bool>,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):LayoutInput {
+        this.runMode = runMode;
+        this.sizingMode = sizingMode;
+        this.axis = axis;
+        this.knownDimensions = knownDimensions;
+        this.knownDimensionsAreDefinite = knownDimensionsAreDefinite;
+        this.parentSize = parentSize;
+        this.availableSpace = availableSpace;
+        this.verticalMarginsAreCollapsible = verticalMarginsAreCollapsible;
+        return this;
     }
 
     /**

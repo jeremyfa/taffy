@@ -485,28 +485,34 @@ class TaffyView<NodeContext>
 
     // TraversePartialTree
 
+    @:noDebug
     public function childIds(parentNodeId:NodeId):Array<NodeId> {
         return data(parentNodeId).children;
     }
 
+    @:noDebug
     public function childCount(parentNodeId:NodeId):Int {
         return data(parentNodeId).children.length;
     }
 
+    @:noDebug
     public function getChildId(parentNodeId:NodeId, childIndex:Int):NodeId {
         return data(parentNodeId).children[childIndex];
     }
 
     // LayoutPartialTree
 
+    @:noDebug
     public function getCoreContainerStyle(nodeId:NodeId):Style {
         return data(nodeId).style;
     }
 
+    @:noDebug
     public function setUnroundedLayout(nodeId:NodeId, layout:Layout):Void {
         data(nodeId).unroundedLayout = layout;
     }
 
+    @:noDebug
     public function computeChildLayout(nodeId:NodeId, inputs:LayoutInput):LayoutOutput {
         return computeChildLayoutWithBlockContext(nodeId, inputs, null);
     }
@@ -554,6 +560,7 @@ class TaffyView<NodeContext>
 
     // LayoutContainingBlock
 
+    @:noDebug
     public function getOofItemStyle(nodeId:NodeId):Style {
         return data(nodeId).style;
     }
@@ -570,54 +577,65 @@ class TaffyView<NodeContext>
             list.push(h);
     }
 
+    @:noDebug
     public function getDetailedLayoutInfo(nodeId:NodeId):DetailedLayoutInfo {
         return data(nodeId).detailedLayoutInfo;
     }
 
     // CacheTree
 
+    @:noDebug
     public function cacheGet(nodeId:NodeId, input:LayoutInput):Null<LayoutOutput> {
         return data(nodeId).cache.get(input);
     }
 
+    @:noDebug
     public function cacheStore(nodeId:NodeId, input:LayoutInput, layoutOutput:LayoutOutput):Void {
         data(nodeId).cache.store(input, layoutOutput);
     }
 
+    @:noDebug
     public function cacheClear(nodeId:NodeId):Void {
         data(nodeId).cache.clear();
     }
 
     // LayoutBlockContainer
 
+    @:noDebug
     public function getBlockContainerStyle(nodeId:NodeId):Style {
         return data(nodeId).style;
     }
 
+    @:noDebug
     public function getBlockChildStyle(childNodeId:NodeId):Style {
         return data(childNodeId).style;
     }
 
+    @:noDebug
     public function computeBlockChildLayout(nodeId:NodeId, inputs:LayoutInput, blockCtx:Null<BlockContext>):LayoutOutput {
         return computeChildLayoutWithBlockContext(nodeId, inputs, blockCtx);
     }
 
     // LayoutFlexboxContainer
 
+    @:noDebug
     public function getFlexboxContainerStyle(nodeId:NodeId):Style {
         return data(nodeId).style;
     }
 
+    @:noDebug
     public function getFlexboxChildStyle(childNodeId:NodeId):Style {
         return data(childNodeId).style;
     }
 
     // LayoutGridContainer
 
+    @:noDebug
     public function getGridContainerStyle(nodeId:NodeId):Style {
         return data(nodeId).style;
     }
 
+    @:noDebug
     public function getGridChildStyle(childNodeId:NodeId):Style {
         return data(childNodeId).style;
     }

@@ -22,13 +22,13 @@ import taffy.util.OptionalFloat;
 class BlockContext {
 
     /** A reference to the root BlockFormattingContext that this BlockContext belongs to */
-    final bfc:BlockFormattingContext;
+    var bfc:BlockFormattingContext;
 
     /**
      * The y-offset of the border-top of the block node, relative to the to the border-top of the
      * root node of the Block Formatting Context it belongs to.
      */
-    final yOffset:Float;
+    var yOffset:Float;
 
     /** The x-insets of the border-box in from each side of the block node, relative to the root node of the BFC */
     final insets:Array<Float>;
@@ -40,7 +40,7 @@ class BlockContext {
     var floatContentContribution:Float = Math.NEGATIVE_INFINITY;
 
     /** Whether the node is the root of the Block Formatting Context is belongs to. */
-    final isRoot:Bool;
+    var isRoot:Bool;
 
     /**
      * Whether a float has been placed (on each side) whose position adjoins the current
@@ -51,9 +51,12 @@ class BlockContext {
 
     /**
      * The value of `adjoiningFloats` frozen at the first point at which in-flow content was
-     * committed within this block. Null if no in-flow content has been committed yet.
+     * committed within this block, when `hasTopAdjoiningFloats` (no in-flow content has been
+     * committed yet otherwise).
      */
-    var topAdjoiningFloats:Null<Array<Bool>> = null;
+    final topAdjoiningFloats:Array<Bool> = [false, false];
+
+    var hasTopAdjoiningFloats:Bool = false;
 
     @:allow(taffy.compute.block.BlockFormattingContext)
     function new(bfc:BlockFormattingContext, yOffset:Float, insetLeft:Float, insetRight:Float, isRoot:Bool, adjoiningLeft:Bool, adjoiningRight:Bool) {
@@ -63,6 +66,43 @@ class BlockContext {
         this.contentBoxInsets = [insetLeft, insetRight];
         this.isRoot = isRoot;
         this.adjoiningFloats = [adjoiningLeft, adjoiningRight];
+    }
+
+    /** Reset to the state of `BlockFormattingContext.rootBlockContext()` (root contexts are reused) */
+    @:allow(taffy.compute.block.BlockFormattingContext)
+    function resetAsRoot():BlockContext {
+        yOffset = 0.0;
+        insets[0] = 0.0;
+        insets[1] = 0.0;
+        contentBoxInsets[0] = 0.0;
+        contentBoxInsets[1] = 0.0;
+        floatContentContribution = Math.NEGATIVE_INFINITY;
+        isRoot = true;
+        adjoiningFloats[0] = false;
+        adjoiningFloats[1] = false;
+        hasTopAdjoiningFloats = false;
+        return this;
+    }
+
+    /**
+     * Make `target` the context that `subContext(additionalYOffset, insetLeft, insetRight)` would
+     * create (sub-contexts are reused by `BlockLayout`), and return it
+     */
+    public function subContextInto(target:BlockContext, additionalYOffset:Float, insetLeft:Float, insetRight:Float):BlockContext {
+        final left = insets[0] + insetLeft;
+        final right = insets[1] + insetRight;
+        target.bfc = bfc;
+        target.yOffset = yOffset + additionalYOffset;
+        target.insets[0] = left;
+        target.insets[1] = right;
+        target.contentBoxInsets[0] = left;
+        target.contentBoxInsets[1] = right;
+        target.floatContentContribution = Math.NEGATIVE_INFINITY;
+        target.isRoot = false;
+        target.adjoiningFloats[0] = adjoiningFloats[0];
+        target.adjoiningFloats[1] = adjoiningFloats[1];
+        target.hasTopAdjoiningFloats = false;
+        return target;
     }
 
     /** Create a sub-`BlockContext` for a child block node */
@@ -158,8 +198,10 @@ class BlockContext {
      * the current margin-collapse strut. The flags for the block's top strut are frozen at the first commit.
      */
     public function commitStrut():Void {
-        if (topAdjoiningFloats == null) {
-            topAdjoiningFloats = [adjoiningFloats[0], adjoiningFloats[1]];
+        if (!hasTopAdjoiningFloats) {
+            topAdjoiningFloats[0] = adjoiningFloats[0];
+            topAdjoiningFloats[1] = adjoiningFloats[1];
+            hasTopAdjoiningFloats = true;
         }
         adjoiningFloats[0] = false;
         adjoiningFloats[1] = false;
@@ -167,7 +209,7 @@ class BlockContext {
 
     /** The adjoining float flags for this block's top margin strut */
     public function getTopAdjoiningFloats():Array<Bool> {
-        return topAdjoiningFloats != null ? topAdjoiningFloats : adjoiningFloats;
+        return hasTopAdjoiningFloats ? topAdjoiningFloats : adjoiningFloats;
     }
 
     /** Update the height that descendent floats consume with the height that floats consume within a particular child */

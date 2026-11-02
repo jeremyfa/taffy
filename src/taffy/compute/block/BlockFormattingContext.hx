@@ -22,4 +22,22 @@ class BlockFormattingContext {
         return new BlockContext(this, 0.0, 0.0, 0.0, true, false, false);
     }
 
+    /** The root context reused by `reuse` */
+    var reusedRoot:Null<BlockContext> = null;
+
+    /**
+     * Empty this context and return its root `BlockContext`, as a new `BlockFormattingContext` and its
+     * `rootBlockContext()` would (contexts are reused between layout calls, see `BlockLayout`)
+     */
+    public function reuse():BlockContext {
+        floatContext.reset();
+        var root = reusedRoot;
+        if (root == null) {
+            root = rootBlockContext();
+            reusedRoot = root;
+            return root;
+        }
+        return root.resetAsRoot();
+    }
+
 }

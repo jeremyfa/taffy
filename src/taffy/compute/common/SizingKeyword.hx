@@ -52,6 +52,7 @@ class SizingKeyword {
      *
      * Returns null if the size style is not a sizing keyword, or if it cannot be resolved in the current context.
      */
+    @:noDebug
     public static function resolveSizingKeyword(style:Dimension, stretchSize:OptionalFloat, percentResolutionBasis:OptionalFloat):Null<SizingKeywordResolution> {
         return switch style.tag() {
             case CompactLength.MIN_CONTENT_TAG: Measure(MinContent);

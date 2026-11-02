@@ -20,6 +20,7 @@ using taffy.style.AvailableSpace;
  * Immutable: every operation returns a new instance.
  */
 @:structInit
+@:generic
 class SizeOf<T> {
 
     /** The x extent of the rectangle */

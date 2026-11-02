@@ -59,7 +59,7 @@ class LayoutOutput {
         this.topMargin = topMargin;
         this.bottomMargin = bottomMargin;
         this.marginsCanCollapseThrough = marginsCanCollapseThrough;
-        this.oofCandidates = oofCandidates != null ? oofCandidates : new OofCandidates();
+        this.oofCandidates = oofCandidates != null ? oofCandidates : OofCandidates.EMPTY;
         this.oofPositioningArea = oofPositioningArea;
     }
 

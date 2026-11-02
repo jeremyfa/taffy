@@ -101,8 +101,11 @@ class BlockItem {
     /** The computed border box size of this item */
     public var computedSize:Size = Size.ZERO;
 
-    /** The computed "static position" of this item */
-    public var staticPosition:Point = Point.ZERO;
+    /**
+     * The y coordinate of the computed "static position" of this item (the only coordinate that is
+     * read: the static position rectangle of an out-of-flow item spans the content box horizontally)
+     */
+    public var staticY:Float = 0.0;
 
     /** Whether margins can be collapsed through this item */
     public var canBeCollapsedThrough:Bool = false;
@@ -111,8 +114,17 @@ class BlockItem {
     public var finalLayout:Null<Layout> = null;
 
     /** Out-of-flow candidates bubbled out of this (in-flow) item's subtree */
-    public var oofCandidates:OofCandidates = new OofCandidates();
+    public var oofCandidates:OofCandidates = OofCandidates.EMPTY;
 
     public function new() {}
+
+    /** Reset the fields that `BlockLayout.generateItemList` does not set (items are reused between layout calls) */
+    public inline function resetState():Void {
+        computedSize = Size.ZERO;
+        staticY = 0.0;
+        canBeCollapsedThrough = false;
+        finalLayout = null;
+        oofCandidates = OofCandidates.EMPTY;
+    }
 
 }

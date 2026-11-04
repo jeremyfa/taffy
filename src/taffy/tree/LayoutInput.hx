@@ -9,6 +9,7 @@ import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
 import taffy.geometry.SizeOpt;
 import taffy.geometry.SizeAvail;
+import taffy.util.OptionalFloat;
 
 /**
  * A struct containing the inputs constraints/hints for laying out a node, which are passed in by the parent.
@@ -121,6 +122,66 @@ class LayoutInput {
             input;
         }
     }
+
+    /**
+     * `acquire` with the sizes given as values: they are written into sizes owned by the pooled
+     * input (no `SizeOpt` / `SizeAvail` allocated per child call).
+     */
+    @:noCompletion
+    public static inline function acquireParts(
+        runMode:RunMode,
+        sizingMode:SizingMode,
+        axis:RequestedAxis,
+        knownWidth:OptionalFloat,
+        knownHeight:OptionalFloat,
+        knownDimensionsAreDefinite:SizeOf<Bool>,
+        parentWidth:OptionalFloat,
+        parentHeight:OptionalFloat,
+        availableWidth:AvailableSpace,
+        availableHeight:AvailableSpace,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):LayoutInput {
+        final depth = poolDepth;
+        poolDepth = depth + 1;
+        var input:LayoutInput;
+        if (depth < pool.length) {
+            input = pool[depth];
+        }
+        else {
+            input = new LayoutInput(runMode, sizingMode, axis, SizeOpt.NONE, knownDimensionsAreDefinite, SizeOpt.NONE, SizeAvail.MAX_CONTENT, verticalMarginsAreCollapsible);
+            pool.push(input);
+        }
+        var known = input.ownKnown;
+        if (known == null) {
+            known = new SizeOpt(knownWidth, knownHeight);
+            input.ownKnown = known;
+        }
+        else {
+            known.set(knownWidth, knownHeight);
+        }
+        var parent = input.ownParent;
+        if (parent == null) {
+            parent = new SizeOpt(parentWidth, parentHeight);
+            input.ownParent = parent;
+        }
+        else {
+            parent.set(parentWidth, parentHeight);
+        }
+        var available = input.ownAvailable;
+        if (available == null) {
+            available = new SizeAvail(availableWidth, availableHeight);
+            input.ownAvailable = available;
+        }
+        else {
+            available.set(availableWidth, availableHeight);
+        }
+        return input.reset(runMode, sizingMode, axis, known, knownDimensionsAreDefinite, parent, available, verticalMarginsAreCollapsible);
+    }
+
+    /** The sizes owned by a pooled input (`acquireParts`), changed in place when it is reused */
+    var ownKnown:Null<SizeOpt> = null;
+    var ownParent:Null<SizeOpt> = null;
+    var ownAvailable:Null<SizeAvail> = null;
 
     /** Give back the last input taken with `acquire` */
     @:noCompletion

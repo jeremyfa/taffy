@@ -582,13 +582,36 @@ class TrackListToken {
 
 }
 
-/** `testMeasureFunction` as a `LayoutMeasurer` (`TaffyTree.computeLayoutWithMeasurer`) */
-private class TestMeasurer implements taffy.tree.LayoutMeasurer<TestNodeContext> {
+/**
+ * `testMeasureFunction` as a `LayoutMeasurer` (`TaffyTree.computeLayoutWithMeasurer`) and a
+ * `LeafMeasurer` (`Leaf.computeLeafLayoutWithMeasurer`, the sizes as values)
+ */
+private class TestMeasurer implements taffy.tree.LayoutMeasurer<TestNodeContext> implements taffy.compute.Leaf.LeafMeasurer {
+
+    var context:Null<TestNodeContext> = null;
 
     public function new() {}
 
     public function measureLeafNode(inputs:taffy.tree.LayoutInput, nodeId:taffy.tree.NodeId, nodeContext:TestNodeContext, style:taffy.style.Style):taffy.tree.LayoutOutput {
-        return XmlTests.testMeasureFunction(inputs, nodeId, nodeContext, style);
+        final previous = context;
+        context = nodeContext;
+        final output = taffy.compute.Leaf.computeLeafLayoutWithMeasurer(inputs, style, this);
+        context = previous;
+        return output;
+    }
+
+    /** The measure of `testMeasureFunction` */
+    public function measureLeafSize(knownWidth:taffy.util.OptionalFloat, knownHeight:taffy.util.OptionalFloat, availableWidth:taffy.style.AvailableSpace, availableHeight:taffy.style.AvailableSpace):Size {
+        if (knownWidth.isSome() && knownHeight.isSome())
+            return new Size(knownWidth.unwrap(), knownHeight.unwrap());
+        if (context == null)
+            return new Size(knownWidth.isSome() ? knownWidth.unwrap() : 0.0, knownHeight.isSome() ? knownHeight.unwrap() : 0.0);
+        context.count++;
+        final computeSize = context.measure(new taffy.geometry.SizeOpt(knownWidth, knownHeight), new taffy.geometry.SizeAvail(availableWidth, availableHeight));
+        return new Size(
+            knownWidth.isSome() ? knownWidth.unwrap() : computeSize.width,
+            knownHeight.isSome() ? knownHeight.unwrap() : computeSize.height
+        );
     }
 
 }

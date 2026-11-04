@@ -16,7 +16,9 @@ using taffy.style.AvailableSpace;
  * `AvailableSpace` is a plain float, so the fields are unboxed (the generic
  * `SizeOf<AvailableSpace>` stored `Dynamic` fields on hxcpp).
  *
- * Immutable: every operation returns a new instance.
+ * Immutable: every operation returns a new instance. The only exception are the
+ * sizes owned by the pooled child inputs of `LayoutInput`, set by `LayoutInput`
+ * when an input is reused (a layout function never keeps its inputs).
  */
 @:structInit
 class SizeAvail {
@@ -28,10 +30,17 @@ class SizeAvail {
     public static final MIN_CONTENT:SizeAvail = new SizeAvail(MinContent, MinContent);
 
     /** The x extent of the rectangle */
-    public final width:AvailableSpace;
+    public var width(default, null):AvailableSpace;
 
     /** The y extent of the rectangle */
-    public final height:AvailableSpace;
+    public var height(default, null):AvailableSpace;
+
+    /** Sets both values (only for the sizes owned by `LayoutInput`) */
+    @:allow(taffy.tree.LayoutInput)
+    inline function set(width:AvailableSpace, height:AvailableSpace):Void {
+        this.width = width;
+        this.height = height;
+    }
 
     public inline function new(width:AvailableSpace, height:AvailableSpace) {
         #if taffy_census

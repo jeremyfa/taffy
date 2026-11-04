@@ -12,6 +12,7 @@ import taffy.style.AvailableSpace;
 import taffy.style.Style;
 import taffy.geometry.SizeOpt;
 import taffy.geometry.SizeAvail;
+import taffy.util.OptionalFloat;
 
 /**
  * Any type that implements `LayoutPartialTree` can be laid out using Taffy's algorithms.
@@ -88,6 +89,61 @@ class LayoutPartialTreeExt {
         verticalMarginsAreCollapsible:LineOf<Bool>
     ):LayoutOutput {
         final output = tree.computeChildLayout(nodeId, LayoutInput.acquire(PerformLayout, sizingMode, Both, knownDimensions, DEFINITE_BOTH, parentSize, availableSpace, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output;
+    }
+
+    /** `measureChildSize` with the sizes given as values (no size objects allocated for the call) */
+    public static function measureChildSizeParts(
+        tree:LayoutPartialTree,
+        nodeId:NodeId,
+        knownWidth:OptionalFloat,
+        knownHeight:OptionalFloat,
+        parentWidth:OptionalFloat,
+        parentHeight:OptionalFloat,
+        availableWidth:AvailableSpace,
+        availableHeight:AvailableSpace,
+        sizingMode:SizingMode,
+        axis:AbsoluteAxis,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):Float {
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquireParts(ComputeSize, sizingMode, RequestedAxis.fromAbsoluteAxis(axis), knownWidth, knownHeight, DEFINITE_BOTH, parentWidth, parentHeight, availableWidth, availableHeight, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output.size.getAbs(axis);
+    }
+
+    /** `measureChildSizeBoth` with the sizes given as values */
+    public static function measureChildSizeBothParts(
+        tree:LayoutPartialTree,
+        nodeId:NodeId,
+        knownWidth:OptionalFloat,
+        knownHeight:OptionalFloat,
+        parentWidth:OptionalFloat,
+        parentHeight:OptionalFloat,
+        availableWidth:AvailableSpace,
+        availableHeight:AvailableSpace,
+        sizingMode:SizingMode,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):Size {
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquireParts(ComputeSize, sizingMode, Both, knownWidth, knownHeight, DEFINITE_BOTH, parentWidth, parentHeight, availableWidth, availableHeight, verticalMarginsAreCollapsible));
+        LayoutInput.release();
+        return output.size;
+    }
+
+    /** `performChildLayout` with the sizes given as values */
+    public static function performChildLayoutParts(
+        tree:LayoutPartialTree,
+        nodeId:NodeId,
+        knownWidth:OptionalFloat,
+        knownHeight:OptionalFloat,
+        parentWidth:OptionalFloat,
+        parentHeight:OptionalFloat,
+        availableWidth:AvailableSpace,
+        availableHeight:AvailableSpace,
+        sizingMode:SizingMode,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):LayoutOutput {
+        final output = tree.computeChildLayout(nodeId, LayoutInput.acquireParts(PerformLayout, sizingMode, Both, knownWidth, knownHeight, DEFINITE_BOTH, parentWidth, parentHeight, availableWidth, availableHeight, verticalMarginsAreCollapsible));
         LayoutInput.release();
         return output;
     }

@@ -14,7 +14,10 @@ import taffy.util.OptionalFloat;
  * The fields are `OptionalFloat`, a plain float, so nothing is boxed (the
  * generic `SizeOf<Null<Float>>` stored `Dynamic` fields on hxcpp).
  *
- * Immutable: every operation returns a new instance.
+ * Immutable: every operation returns a new instance. The only exception are the
+ * sizes owned by the pooled child inputs of `LayoutInput` and by the pooled flex
+ * items (`FlexItem.ownedSize`), set again when the input or the item is reused
+ * (a layout function never keeps its inputs or its items).
  */
 @:structInit
 class SizeOpt {
@@ -23,10 +26,18 @@ class SizeOpt {
     public static final NONE:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
 
     /** The x extent of the rectangle */
-    public final width:OptionalFloat;
+    public var width(default, null):OptionalFloat;
 
     /** The y extent of the rectangle */
-    public final height:OptionalFloat;
+    public var height(default, null):OptionalFloat;
+
+    /** Sets both values (only for the sizes owned by `LayoutInput` and the pooled flex items) */
+    @:allow(taffy.tree.LayoutInput)
+    @:allow(taffy.compute.flexbox.FlexItem)
+    inline function set(width:OptionalFloat, height:OptionalFloat):Void {
+        this.width = width;
+        this.height = height;
+    }
 
     public inline function new(width:OptionalFloat, height:OptionalFloat) {
         #if taffy_census

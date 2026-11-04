@@ -152,6 +152,27 @@ class FlexItem {
     public function new() {}
 
     /** Initialize every field, as a newly created item */
+    /** Sizes owned by this pooled item, set again each time it is reused (see `ownedSize`) */
+    final ownSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownMinSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownMaxSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+
+    /**
+     * `SizeOpt.shared(width, height)` without allocating: the shared `NONE` when both are absent,
+     * otherwise `own` set to the values (`own` is one of this item's own sizes)
+     */
+    static inline function ownedOrNone(own:SizeOpt, width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        if (width.isNone() && height.isNone())
+            return SizeOpt.NONE;
+        own.set(width, height);
+        return own;
+    }
+
+    /** The item's own size for `reset` (`kind` 0: size, 1: min size, 2: max size) */
+    public inline function ownedSize(kind:Int, width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        return ownedOrNone(kind == 0 ? ownSize : (kind == 1 ? ownMinSize : ownMaxSize), width, height);
+    }
+
     public function reset(
         node:NodeId,
         order:Int,

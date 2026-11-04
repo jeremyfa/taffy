@@ -32,6 +32,17 @@ using taffy.util.Resolve;
 typedef LeafMeasureFunction = (knownDimensions:SizeOpt, availableSpace:SizeAvail) -> Size;
 
 /**
+ * The measure function of a leaf node as an object (`Leaf.computeLeafLayoutWithMeasurer`): a typed
+ * call taking the known dimensions and the available space as values, where the function value
+ * receives two size objects made for the call.
+ */
+interface LeafMeasurer {
+
+    function measureLeafSize(knownWidth:OptionalFloat, knownHeight:OptionalFloat, availableWidth:AvailableSpace, availableHeight:AvailableSpace):Size;
+
+}
+
+/**
  * Computes the layout of leaf nodes
  */
 class Leaf {
@@ -45,6 +56,15 @@ class Leaf {
      * Note: the Rust version also takes a `resolve_calc_value` closure. `calc()` is not supported by this port.
      */
     public static function computeLeafLayout(inputs:LayoutInput, style:Style, measureFunction:LeafMeasureFunction):LayoutOutput {
+        return computeLeafLayoutImpl(inputs, style, measureFunction, null);
+    }
+
+    /** `computeLeafLayout` with the measure function given as an object */
+    public static function computeLeafLayoutWithMeasurer(inputs:LayoutInput, style:Style, measurer:LeafMeasurer):LayoutOutput {
+        return computeLeafLayoutImpl(inputs, style, null, measurer);
+    }
+
+    static function computeLeafLayoutImpl(inputs:LayoutInput, style:Style, measureFunction:Null<LeafMeasureFunction>, measurer:Null<LeafMeasurer>):LayoutOutput {
         final knownDimensions = inputs.knownDimensions;
         final parentSize = inputs.parentSize;
         final availableSpace = inputs.availableSpace;
@@ -132,20 +152,18 @@ class Leaf {
         final availHeight = (knownDimensions.height.isSome() ? Definite(knownDimensions.height.unwrap()) : availableSpace.height)
             .maybeSet(knownDimensions.height)
             .maybeSet(nodeSize.height);
-        final measureAvailableSpace = new SizeAvail(
-            availWidth.isDefinite() ? Definite(availWidth.definiteValue().maybeClampF(nodeMinSizeW, nodeMaxSizeW) - insetH) : availWidth,
-            availHeight.isDefinite() ? Definite(availHeight.definiteValue().maybeClampF(nodeMinSizeH, nodeMaxSizeH) - insetV) : availHeight
-        );
+        final measureAvailableWidth = availWidth.isDefinite() ? Definite(availWidth.definiteValue().maybeClampF(nodeMinSizeW, nodeMaxSizeW) - insetH) : availWidth;
+        final measureAvailableHeight = availHeight.isDefinite() ? Definite(availHeight.definiteValue().maybeClampF(nodeMinSizeH, nodeMaxSizeH) - insetV) : availHeight;
 
         // Measure node
-        final measuredSize = measureFunction(
-            switch runMode {
-                case ComputeSize: knownDimensions;
-                case PerformLayout: SizeOpt.NONE;
-                case PerformHiddenLayout: throw 'unreachable';
-            },
-            measureAvailableSpace
-        );
+        final measureKnownDimensions = switch runMode {
+            case ComputeSize: knownDimensions;
+            case PerformLayout: SizeOpt.NONE;
+            case PerformHiddenLayout: throw 'unreachable';
+        };
+        final measuredSize = measurer != null
+            ? measurer.measureLeafSize(measureKnownDimensions.width, measureKnownDimensions.height, measureAvailableWidth, measureAvailableHeight)
+            : measureFunction(measureKnownDimensions, new SizeAvail(measureAvailableWidth, measureAvailableHeight));
         final clampedSize = knownDimensions
             .or(nodeSize)
             .unwrapOr(measuredSize.add(contentBoxInset.sumAxes()))

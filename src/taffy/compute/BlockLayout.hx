@@ -680,11 +680,14 @@ class BlockLayout {
                     case Exact(w): Definite(w);
                     case null: availableWidth.maybeSub(OptionalFloat.some(itemXMarginSum));
                 }
-                width = tree.measureChildSize(
+                width = tree.measureChildSizeParts(
                     item.nodeId,
-                    knownDimensions,
-                    SizeOpt.NONE,
-                    new SizeAvail(itemAvailableWidth, MinContent),
+                    knownDimensions.width,
+                    knownDimensions.height,
+                    OptionalFloat.NONE,
+                    OptionalFloat.NONE,
+                    itemAvailableWidth,
+                    MinContent,
                     InherentSize,
                     Horizontal,
                     // Must match the value passed when laying the item out (see `Cache`)
@@ -947,9 +950,12 @@ class BlockLayout {
             final hasNonStretchJustifySelf = !(justifySelf.keyword == AlignItemsKeyword.Normal || justifySelf.keyword == AlignItemsKeyword.Stretch);
 
             // Unless stretched, tables and compressible replaced elements resolve their own width
-            var knownDimensions:SizeOpt;
+            // The known dimensions as two values (no size object for the child call)
+            var knownWidth:OptionalFloat;
+            var knownHeight:OptionalFloat;
             if ((item.isTable || item.isCompressibleReplaced) && !isStretch) {
-                knownDimensions = SizeOpt.NONE;
+                knownWidth = OptionalFloat.NONE;
+                knownHeight = OptionalFloat.NONE;
             }
             else {
                 // The automatic width of a block-level box whose `justify-self` is neither `normal` nor `stretch`
@@ -961,11 +967,14 @@ class BlockLayout {
                 final keywordWidth:OptionalFloat = switch SizingKeyword.resolveSizingKeyword(widthStyle, OptionalFloat.some(stretchWidth), OptionalFloat.some(containerInnerWidth)) {
                     case Exact(width): OptionalFloat.some(width);
                     case Measure(itemAvailableWidth):
-                        OptionalFloat.some(tree.measureChildSize(
+                        OptionalFloat.some(tree.measureChildSizeParts(
                             item.nodeId,
-                            SizeOpt.NONE,
-                            parentSize,
-                            new SizeAvail(itemAvailableWidth, MaxContent),
+                            OptionalFloat.NONE,
+                            OptionalFloat.NONE,
+                            parentSize.width,
+                            parentSize.height,
+                            itemAvailableWidth,
+                            MaxContent,
                             InherentSize,
                             Horizontal,
                             // Must match the value passed when laying the item out (see `Cache`)
@@ -980,21 +989,26 @@ class BlockLayout {
                     childrenMarginsAdjoinOwnEdges
                 );
                 final w:Float = item.size.width.isSome() ? item.size.width.unwrap() : (keywordWidth.isSome() ? keywordWidth.unwrap() : stretchWidth);
-                knownDimensions = new SizeOpt(
+                final clamped = new SizeOpt(
                     OptionalFloat.some(w.maybeClampF(item.minSize.width, item.maxSize.width)),
                     item.size.height.isSome() ? item.size.height : keywordHeight
                 ).maybeClamp(item.minSize, item.maxSize);
+                knownWidth = clamped.width;
+                knownHeight = clamped.height;
             }
 
-            final inputs = LayoutInput.acquire(
+            final inputs = LayoutInput.acquireParts(
                 runMode,
                 InherentSize,
                 Both,
-                knownDimensions,
+                knownWidth,
+                knownHeight,
                 TRUE_SIZE,
-                parentSize,
+                parentSize.width,
+                parentSize.height,
                 // Vertical available space in block flow is indefinite (MaxContent), not a min-content constraint
-                new SizeAvail(Definite(stretchWidth), MaxContent),
+                Definite(stretchWidth),
+                MaxContent,
                 item.isInSameBfc ? TRUE_LINE : FALSE_LINE
             );
 
@@ -1008,7 +1022,7 @@ class BlockLayout {
             final itemLayout:LayoutOutput = if (item.isInSameBfc) {
                 // Replaced elements may not have a known width (they are sized by their
                 // measure function rather than stretch-sized)
-                final width = Sys.f32Max(knownDimensions.width.unwrapOr(stretchWidth), item.paddingBorderSum.width);
+                final width = Sys.f32Max(knownWidth.unwrapOr(stretchWidth), item.paddingBorderSum.width);
                 // TODO: account for auto margins
                 final insetLeft = itemNonAutoMargin.left + contentBoxInset.left;
                 final insetRight = containerOuterWidth - width - insetLeft;

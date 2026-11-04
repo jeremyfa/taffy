@@ -323,8 +323,10 @@ class GridAlignment {
         // container's padding-box origin (mirrored for RTL), matching the scrollable overflow region.
         final isRtlLocation = direction.isRtl();
         final contributionLocation = new Point(isRtlLocation ? containerBorderBoxWidth - (x + finalWidth) - containerBorder.right : x - containerBorder.left, y - containerBorder.top);
-        final contribution = ScrollableOverflow.computeScrollableOverflowContribution(contributionLocation, new Size(finalWidth, finalHeight),
+        final scratchContribution = ScrollableOverflow.computeScrollableOverflowContribution(contributionLocation, new Size(finalWidth, finalHeight),
             layoutOutput.scrollableOverflowRect, overflow, contain, containerIsScrollContainer);
+        // Kept in the result: a copy of the scratch rect
+        final contribution = new Rect(scratchContribution.left, scratchContribution.right, scratchContribution.top, scratchContribution.bottom);
 
         return new ItemPositionResult(contribution, y, finalHeight);
     }

@@ -34,7 +34,14 @@ class ScrollableOverflow {
         return contributionAt(location.x, location.y, size, scrollableOverflowRect, overflow, contain, parentIsScrollContainer);
     }
 
-    /** `computeScrollableOverflowContribution` with the location as two values (no `Point` to allocate) */
+    /** The result of `contributionAt` (changed by the next call: callers read it right away) */
+    static final scratch:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+
+    /**
+     * `computeScrollableOverflowContribution` with the location as two values (no `Point` to
+     * allocate). The result is `Rect.ZERO` or a scratch rect valid until the next call: read it
+     * right away, or copy it to keep it.
+     */
     public static function contributionAt(
         locationX:Float,
         locationY:Float,
@@ -59,7 +66,8 @@ class ScrollableOverflow {
         final startExtentX = propagatesX ? Sys.f32Min(0.0, scrollableOverflowRect.left) : 0.0;
         final startExtentY = propagatesY ? Sys.f32Min(0.0, scrollableOverflowRect.top) : 0.0;
 
-        final contribution = new Rect(
+        final contribution = scratch;
+        contribution.set(
             locationX + startExtentX,
             locationX + endExtentWidth,
             locationY + startExtentY,

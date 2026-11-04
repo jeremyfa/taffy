@@ -12,7 +12,9 @@ import taffy.util.MaybeMath;
 /**
  * The width and height of a rectangle (concrete `Size<f32>`).
  *
- * Immutable: every operation returns a new instance.
+ * Immutable: every operation returns a new instance. The only exception are the
+ * values owned by the flex constants (`AlgoConstants`), set again when the constants
+ * are reused (a layout function never keeps its constants).
  */
 @:structInit
 class Size {
@@ -21,10 +23,17 @@ class Size {
     public static final ZERO:Size = new Size(0.0, 0.0);
 
     /** The x extent of the rectangle */
-    public final width:Float;
+    public var width(default, null):Float;
 
     /** The y extent of the rectangle */
-    public final height:Float;
+    public var height(default, null):Float;
+
+    /** Sets both values (only for the sizes owned by `AlgoConstants`) */
+    @:allow(taffy.compute.flexbox.AlgoConstants)
+    inline function set(width:Float, height:Float):Void {
+        this.width = width;
+        this.height = height;
+    }
 
     public inline function new(width:Float, height:Float) {
         #if taffy_census
@@ -74,7 +83,7 @@ class Size {
         return new Size(width - rhs.width, height - rhs.height);
     }
 
-    public inline function map(f:Float->Float):Size {
+    public inline function map(f:(Float) -> Float):Size {
         return new Size(f(width), f(height));
     }
 

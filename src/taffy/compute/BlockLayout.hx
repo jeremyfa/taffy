@@ -297,7 +297,6 @@ class BlockLayout {
             inputs.knownDimensionsAreDefinite.height ? knownDimensions.height : OptionalFloat.NONE
         );
         final contentBoxSize = percentageBasisDimensions.maybeSubSize(contentBoxInset.sumAxes());
-        final containerContentBoxSize = SizeOpt.shared(contentBoxSize.width, contentBoxSize.height);
 
         final overflow = style.overflow;
         final isScrollContainer = overflow.x.isScrollContainer() || overflow.y.isScrollContainer();
@@ -338,7 +337,8 @@ class BlockLayout {
         final justifyItems = style.justifyItems;
 
         // 1. Generate items
-        final items = generateItemList(tree, nodeId, containerContentBoxSize, itemArray);
+        // `SizeOpt.shared(contentBoxSize.width, contentBoxSize.height)` as values
+        final items = generateItemList(tree, nodeId, contentBoxSize.width, contentBoxSize.height, itemArray);
 
         // 2. Compute container width
         final containerOuterWidth:Float = if (knownDimensions.width.isSome()) {
@@ -503,9 +503,12 @@ class BlockLayout {
         // 4. Collect out-of-flow candidates in document order (direct out-of-flow children plus
         // candidates bubbled from in-flow children's subtrees). These are laid out by the
         // out-of-flow positioning pass (`Oof.computeOofLayout`), which runs after this algorithm.
-        final candidates = new OofCandidates();
+        // Made on the first candidate (`OofCandidates.EMPTY` when there is none)
+        var candidates:Null<OofCandidates> = null;
         for (item in items) {
             if (item.position.isOutOfFlow()) {
+                if (candidates == null)
+                    candidates = new OofCandidates();
                 // The static-position rectangle of an out-of-flow child of a block container spans
                 // the container's content box in the inline axis, and is a zero-height line at the
                 // child's hypothetical position in the block axis.
@@ -531,15 +534,23 @@ class BlockLayout {
                 if (layout != null) {
                     item.oofCandidates.translate(layout.location);
                 }
+                if (candidates == null)
+                    candidates = new OofCandidates();
                 candidates.append(item.oofCandidates);
             }
         }
 
-        final absolutePositionInset = resolvedBorder.add(scrollbarGutter);
-        final absolutePositionArea = finalOuterSize.sub(absolutePositionInset.sumAxes());
-        final absolutePositionOffset = new Point(absolutePositionInset.left, absolutePositionInset.top);
-        output.oofCandidates = candidates;
-        output.oofPositioningArea = new OofPositioningArea(absolutePositionArea, absolutePositionOffset);
+        if (candidates == null || candidates.isEmpty()) {
+            output.oofCandidates = OofCandidates.EMPTY;
+            output.oofPositioningArea = OofPositioningArea.UNUSED;
+        }
+        else {
+            final absolutePositionInset = resolvedBorder.add(scrollbarGutter);
+            final absolutePositionArea = finalOuterSize.sub(absolutePositionInset.sumAxes());
+            final absolutePositionOffset = new Point(absolutePositionInset.left, absolutePositionInset.top);
+            output.oofCandidates = candidates;
+            output.oofPositioningArea = new OofPositioningArea(absolutePositionArea, absolutePositionOffset);
+        }
 
         // A scroll container's own padding at the end of the content is part of its scrollable
         // overflow region, so it is included in the in-flow overflow rect.
@@ -568,7 +579,9 @@ class BlockLayout {
     }
 
     /** Create an array of `BlockItem` where each item represents a child of the current node */
-    static function generateItemList(tree:LayoutBlockContainer, node:NodeId, nodeInnerSize:SizeOpt, items:Array<BlockItem>):Array<BlockItem> {
+    static function generateItemList(tree:LayoutBlockContainer, node:NodeId, nodeInnerWidth:OptionalFloat, nodeInnerHeight:OptionalFloat, items:Array<BlockItem>):Array<BlockItem> {
+        // As values (no size object for the call); read through inline functions only
+        final nodeInnerSize = new SizeOpt(nodeInnerWidth, nodeInnerHeight);
         items.resize(0);
         final count = tree.childCount(node);
         var order = 0;
@@ -618,9 +631,10 @@ class BlockLayout {
             final size = childStyle.size.maybeResolve(nodeInnerSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
             final minSize = childStyle.minSize.maybeResolve(nodeInnerSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
             final maxSize = childStyle.maxSize.maybeResolve(nodeInnerSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
-            item.size = SizeOpt.shared(size.width, size.height);
-            item.minSize = SizeOpt.shared(minSize.width, minSize.height);
-            item.maxSize = SizeOpt.shared(maxSize.width, maxSize.height);
+            // The item's own sizes, set in place (nothing allocated per item and layout)
+            item.size = item.ownedSize(0, size.width, size.height);
+            item.minSize = item.ownedSize(1, minSize.width, minSize.height);
+            item.maxSize = item.ownedSize(2, maxSize.width, maxSize.height);
             item.overflow = overflow;
             item.contain = contain;
             item.scrollbarWidth = childStyle.scrollbarWidth;

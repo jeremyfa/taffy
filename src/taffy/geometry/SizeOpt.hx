@@ -35,6 +35,7 @@ class SizeOpt {
     /** Sets both values (only for the sizes owned by `LayoutInput` and the pooled flex items) */
     @:allow(taffy.tree.LayoutInput)
     @:allow(taffy.compute.flexbox.FlexItem)
+    @:allow(taffy.compute.block.BlockItem)
     @:allow(taffy.compute.flexbox.AlgoConstants)
     inline function set(width:OptionalFloat, height:OptionalFloat):Void {
         this.width = width;
@@ -83,7 +84,7 @@ class SizeOpt {
     }
 
     /** Applies the function `f` to both the width and height */
-    public inline function map(f:OptionalFloat->OptionalFloat):SizeOpt {
+    public inline function map(f:(OptionalFloat) -> OptionalFloat):SizeOpt {
         return new SizeOpt(f(width), f(height));
     }
 

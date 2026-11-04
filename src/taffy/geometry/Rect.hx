@@ -11,7 +11,10 @@ import taffy.util.Sys;
 /**
  * An axis-aligned UI rectangle (concrete `Rect<f32>`).
  *
- * Immutable: every operation returns a new instance.
+ * Immutable: every operation returns a new instance. The only exception are the
+ * values owned by the flex constants (`AlgoConstants`), set again when the constants
+ * are reused (a layout function never keeps its constants), and the scratch result of
+ * `ScrollableOverflow.contributionAt`.
  */
 @:structInit
 class Rect {
@@ -20,16 +23,26 @@ class Rect {
     public static final ZERO:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
 
     /** This can represent either the x-coordinate of the starting edge, or the amount of padding on the starting side. */
-    public final left:Float;
+    public var left(default, null):Float;
 
     /** This can represent either the x-coordinate of the ending edge, or the amount of padding on the ending side. */
-    public final right:Float;
+    public var right(default, null):Float;
 
     /** This can represent either the y-coordinate of the top edge, or the amount of padding on the top side. */
-    public final top:Float;
+    public var top(default, null):Float;
 
     /** This can represent either the y-coordinate of the bottom edge, or the amount of padding on the bottom side. */
-    public final bottom:Float;
+    public var bottom(default, null):Float;
+
+    /** Sets the four values (only for the rects owned by `AlgoConstants`) */
+    @:allow(taffy.compute.flexbox.AlgoConstants)
+    @:allow(taffy.compute.common.ScrollableOverflow)
+    inline function set(left:Float, right:Float, top:Float, bottom:Float):Void {
+        this.left = left;
+        this.right = right;
+        this.top = top;
+        this.bottom = bottom;
+    }
 
     public inline function new(left:Float, right:Float, top:Float, bottom:Float) {
         #if taffy_census
@@ -55,7 +68,7 @@ class Rect {
         return new Rect(left + rhs.left, right + rhs.right, top + rhs.top, bottom + rhs.bottom);
     }
 
-    public inline function map(f:Float->Float):Rect {
+    public inline function map(f:(Float) -> Float):Rect {
         return new Rect(f(left), f(right), f(top), f(bottom));
     }
 

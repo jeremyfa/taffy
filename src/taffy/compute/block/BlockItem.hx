@@ -23,6 +23,7 @@ import taffy.tree.Layout;
 import taffy.tree.NodeId;
 import taffy.tree.OofCandidates;
 import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
 
 /**
  * Per-child data that is accumulated and modified over the course of the block layout algorithm
@@ -55,6 +56,23 @@ class BlockItem {
 
     /** The base size of this item */
     public var size:SizeOpt;
+
+    /** Sizes owned by this pooled item, set again each time it is reused (see `ownedSize`) */
+    final ownSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownMinSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownMaxSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+
+    /**
+     * `SizeOpt.shared(width, height)` without allocating (`kind` 0: size, 1: min size, 2: max
+     * size): the shared `NONE` when both are absent, otherwise this item's own size set to them
+     */
+    public inline function ownedSize(kind:Int, width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        if (width.isNone() && height.isNone())
+            return SizeOpt.NONE;
+        final own = kind == 0 ? ownSize : (kind == 1 ? ownMinSize : ownMaxSize);
+        own.set(width, height);
+        return own;
+    }
 
     /** The minimum allowable size of this item */
     public var minSize:SizeOpt;

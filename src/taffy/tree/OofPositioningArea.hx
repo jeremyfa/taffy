@@ -20,6 +20,13 @@ class OofPositioningArea {
     /** The offset of the area from the container's border box origin */
     public final offset:Point;
 
+    /**
+     * The area of an output without out-of-flow candidates: `Oof.computeOofLayout` only reads
+     * the area of an output with candidates (and an output's candidates do not change once it is
+     * made), so it is shared instead of computed.
+     */
+    public static final UNUSED:OofPositioningArea = new OofPositioningArea(Size.ZERO, Point.ZERO);
+
     public inline function new(size:Size, offset:Point) {
         this.size = size;
         this.offset = offset;

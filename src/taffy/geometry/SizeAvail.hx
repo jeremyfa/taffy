@@ -37,6 +37,7 @@ class SizeAvail {
 
     /** Sets both values (only for the sizes owned by `LayoutInput`) */
     @:allow(taffy.tree.LayoutInput)
+    @:allow(taffy.compute.flexbox.AlgoConstants)
     inline function set(width:AvailableSpace, height:AvailableSpace):Void {
         this.width = width;
         this.height = height;
@@ -73,7 +74,7 @@ class SizeAvail {
     }
 
     /** Applies the function `f` to both the width and height */
-    public inline function map(f:AvailableSpace->AvailableSpace):SizeAvail {
+    public inline function map(f:(AvailableSpace) -> AvailableSpace):SizeAvail {
         return new SizeAvail(f(width), f(height));
     }
 

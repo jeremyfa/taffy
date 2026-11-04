@@ -398,10 +398,33 @@ class Oof {
      *
      * It is a no-op when `output.oofPositioningArea` is null (leaf and size-only outputs).
      */
+    /** The same value, zero signs included */
+    static inline function sameFloat(a:Float, b:Float):Bool {
+        return a == b && (b != 0.0 || 1.0 / a == 1.0 / b);
+    }
+
     public static function computeOofLayout(tree:LayoutContainingBlock, nodeId:NodeId, output:LayoutOutput):Void {
         final area = output.oofPositioningArea;
         if (area == null)
             return;
+        final taken = output.oofCandidates.take();
+        if (taken.isEmpty()) {
+            // What the general path gives without any candidate (no hoisted child, no unclaimed
+            // candidate, a zero overflow rect from `performOofLayout`), without its lists
+            tree.clearHoistedChildren(nodeId);
+            output.oofCandidates = OofCandidates.EMPTY;
+            final rect = output.scrollableOverflowRect;
+            final zero = Rect.ZERO;
+            final left = Sys.f32Min(rect.left, zero.left);
+            final right = Sys.f32Max(rect.right, zero.right);
+            final top = Sys.f32Min(rect.top, zero.top);
+            final bottom = Sys.f32Max(rect.bottom, zero.bottom);
+            // `rect.union(Rect.ZERO)`, the same object when the union does not change it
+            if (!sameFloat(left, rect.left) || !sameFloat(right, rect.right) || !sameFloat(top, rect.top) || !sameFloat(bottom, rect.bottom))
+                output.scrollableOverflowRect = new Rect(left, right, top, bottom);
+            return;
+        }
+        output.oofCandidates = taken;
         final style = tree.getCoreContainerStyle(nodeId);
         final direction = style.direction;
         final claims = style.isContainingBlock();

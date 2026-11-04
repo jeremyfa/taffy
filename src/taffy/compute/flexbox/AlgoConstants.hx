@@ -126,6 +126,67 @@ class AlgoConstants {
     final ownNodeInnerSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
     final ownNodeOuterSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
 
+    /** Values owned by these constants for `computeConstants` (the shared zero or none ones when they apply) */
+    final ownMinSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownMaxSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownBorder:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownContentBoxInset:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownGap:Size = new Size(0.0, 0.0);
+    final ownAvailableSpace:taffy.geometry.SizeAvail = new taffy.geometry.SizeAvail(taffy.style.AvailableSpace.MaxContent, taffy.style.AvailableSpace.MaxContent);
+
+    /** `SizeOpt.shared(width, height)` for `minSize`, without allocating */
+    public inline function sharedMinSize(width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        return sharedSizeOpt(ownMinSize, width, height);
+    }
+
+    /** `SizeOpt.shared(width, height)` for `maxSize`, without allocating */
+    public inline function sharedMaxSize(width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        return sharedSizeOpt(ownMaxSize, width, height);
+    }
+
+    /** `SizeOpt.shared(width, height)` for the initial `nodeInnerSize`, without allocating */
+    public inline function sharedNodeInnerSize(width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        return sharedSizeOpt(ownNodeInnerSize, width, height);
+    }
+
+    static inline function sharedSizeOpt(own:SizeOpt, width:OptionalFloat, height:OptionalFloat):SizeOpt {
+        if (width.isNone() && height.isNone())
+            return SizeOpt.NONE;
+        own.set(width, height);
+        return own;
+    }
+
+    /** `Rect.shared(...)` for `border`, without allocating */
+    public inline function sharedBorder(left:Float, right:Float, top:Float, bottom:Float):Rect {
+        return sharedRect(ownBorder, left, right, top, bottom);
+    }
+
+    /** `Rect.shared(...)` for `contentBoxInset`, without allocating */
+    public inline function sharedContentBoxInset(left:Float, right:Float, top:Float, bottom:Float):Rect {
+        return sharedRect(ownContentBoxInset, left, right, top, bottom);
+    }
+
+    static inline function sharedRect(own:Rect, left:Float, right:Float, top:Float, bottom:Float):Rect {
+        if (Size.isPositiveZero(left) && Size.isPositiveZero(right) && Size.isPositiveZero(top) && Size.isPositiveZero(bottom))
+            return Rect.ZERO;
+        own.set(left, right, top, bottom);
+        return own;
+    }
+
+    /** `Size.shared(width, height)` for `gap`, without allocating */
+    public inline function sharedGap(width:Float, height:Float):Size {
+        if (Size.isPositiveZero(width) && Size.isPositiveZero(height))
+            return Size.ZERO;
+        ownGap.set(width, height);
+        return ownGap;
+    }
+
+    /** `new SizeAvail(width, height)` for the flexbox available space, without allocating */
+    public inline function availableSpaceOf(width:taffy.style.AvailableSpace, height:taffy.style.AvailableSpace):taffy.geometry.SizeAvail {
+        ownAvailableSpace.set(width, height);
+        return ownAvailableSpace;
+    }
+
     /** `nodeInnerSize = nodeInnerSize.withMain(dir, value)` without allocating */
     public inline function setNodeInnerMain(value:OptionalFloat):Void {
         final current = nodeInnerSize;

@@ -376,18 +376,7 @@ class FlexboxLayout {
         // Collect out-of-flow candidates in document order (direct out-of-flow children interleaved
         // with candidates bubbled from in-flow children's subtrees). These are laid out by the
         // out-of-flow positioning pass (`computeOofLayout`), which runs after this algorithm.
-        final candidates = new OofCandidates();
-        collectOofCandidates(tree, node, constants, flexItems, candidates);
-
-        final isRtl = constants.layoutDirection.isRtl();
-        final absolutePositionInset = constants.border.add(new Rect(
-            isRtl ? constants.scrollbarGutter.x : 0.0,
-            isRtl ? 0.0 : constants.scrollbarGutter.x,
-            0.0,
-            constants.scrollbarGutter.y
-        ));
-        final absolutePositionArea = constants.containerSize.toSize().sub(absolutePositionInset.sumAxes());
-        final absolutePositionOffset = new Point(absolutePositionInset.left, absolutePositionInset.top);
+        final candidates = collectOofCandidates(tree, node, constants, flexItems);
 
         final len = tree.childCount(node);
         for (order in 0...len) {
@@ -442,7 +431,21 @@ class FlexboxLayout {
             Baselines.fromFirst(firstVerticalBaseline)
         );
         output.oofCandidates = candidates;
-        output.oofPositioningArea = new OofPositioningArea(absolutePositionArea, absolutePositionOffset);
+        output.oofPositioningArea = if (candidates.isEmpty()) {
+            OofPositioningArea.UNUSED;
+        }
+        else {
+            final isRtl = constants.layoutDirection.isRtl();
+            final absolutePositionInset = constants.border.add(new Rect(
+                isRtl ? constants.scrollbarGutter.x : 0.0,
+                isRtl ? 0.0 : constants.scrollbarGutter.x,
+                0.0,
+                constants.scrollbarGutter.y
+            ));
+            final absolutePositionArea = constants.containerSize.toSize().sub(absolutePositionInset.sumAxes());
+            final absolutePositionOffset = new Point(absolutePositionInset.left, absolutePositionInset.top);
+            new OofPositioningArea(absolutePositionArea, absolutePositionOffset);
+        };
         return output;
     }
 
@@ -506,11 +509,11 @@ class FlexboxLayout {
         final insetRight = isLtr ? paddingBorder.right + gutterX : paddingBorder.right;
         final insetTop = paddingBorder.top;
         final insetBottom = paddingBorder.bottom + gutterY;
-        final contentBoxInset = Rect.shared(insetLeft, insetRight, insetTop, insetBottom);
+        final contentBoxInset = c.sharedContentBoxInset(insetLeft, insetRight, insetTop, insetBottom);
 
         final nodeOuterSize = knownDimensions;
         final innerSize = nodeOuterSize.maybeSubSize(new Size(insetLeft + insetRight, insetTop + insetBottom));
-        final nodeInnerSize = SizeOpt.shared(innerSize.width, innerSize.height);
+        final nodeInnerSize = c.sharedNodeInnerSize(innerSize.width, innerSize.height);
         final knownMainSizeIsDefinite = knownDimensionsAreDefinite.main(dir);
         final hasDefiniteMainSize = knownMainSizeIsDefinite && knownDimensions.main(dir).isSome();
         final hasDefiniteCrossSize = knownDimensionsAreDefinite.cross(dir) && knownDimensions.cross(dir).isSome();
@@ -520,7 +523,7 @@ class FlexboxLayout {
             nodeInnerSize.height.isSome() ? nodeInnerSize.height : OptionalFloat.some(0.0)
         );
         final resolvedGap = style.gap.resolveOrZero(gapContext);
-        final gap = Size.shared(resolvedGap.width, resolvedGap.height);
+        final gap = c.sharedGap(resolvedGap.width, resolvedGap.height);
         final minSize = style.minSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
         final maxSize = style.maxSize.maybeResolve(parentSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
 
@@ -533,9 +536,9 @@ class FlexboxLayout {
         c.isWrapReverse = isWrapReverse;
         c.isBalance = isBalance;
         c.lineCount = lineCount;
-        c.minSize = SizeOpt.shared(minSize.width, minSize.height);
-        c.maxSize = SizeOpt.shared(maxSize.width, maxSize.height);
-        c.border = Rect.shared(border.left, border.right, border.top, border.bottom);
+        c.minSize = c.sharedMinSize(minSize.width, minSize.height);
+        c.maxSize = c.sharedMaxSize(maxSize.width, maxSize.height);
+        c.border = c.sharedBorder(border.left, border.right, border.top, border.bottom);
         c.gap = gap;
         c.contentBoxInset = contentBoxInset;
         c.scrollbarGutter = scrollbarGutter;
@@ -702,7 +705,8 @@ class FlexboxLayout {
             outerAvailableSpace.height.maybeSub(OptionalFloat.some(constants.contentBoxInset.verticalAxisSum())).maybeMax(OptionalFloat.some(0.0));
         };
 
-        return new SizeAvail(width, height);
+        // Owned by the constants (no allocation per container)
+        return constants.availableSpaceOf(width, height);
     }
 
     /**
@@ -1591,7 +1595,9 @@ class FlexboxLayout {
 
         // 4. Loop
 
-        final unfrozen:Array<FlexItem> = [];
+        // Scratch list (this computation makes no child call, so it is never nested)
+        final unfrozen = unfrozenScratch;
+        unfrozen.resize(0);
         while (true) {
             // a. Check for flexible items. If all the flex items on the line are frozen,
             //    free space has been distributed; exit this loop.
@@ -2546,13 +2552,17 @@ class FlexboxLayout {
      * of each in-flow item's subtree. Final sizing and positioning happens in the shared
      * out-of-flow positioning pass at the containing block.
      */
+    /** The unfrozen items of `resolveFlexibleLengths` (reused from call to call) */
+    static final unfrozenScratch:Array<FlexItem> = [];
+
     static function collectOofCandidates(
         tree:LayoutFlexboxContainer,
         node:NodeId,
         constants:AlgoConstants,
-        flexItems:Array<FlexItem>,
-        candidates:OofCandidates
-    ):Void {
+        flexItems:Array<FlexItem>
+    ):OofCandidates {
+        // Made on the first candidate (`OofCandidates.EMPTY` when there is none)
+        var candidates:Null<OofCandidates> = null;
         // Lines are contiguous slices of the items in document order (reversal is applied to
         // positions, not storage), so walking the items yields items sorted by `order`
         var itemIndex = 0;
@@ -2571,9 +2581,10 @@ class FlexboxLayout {
         final mainAxisFlexStartReversed = dir.isReverse() != mainIsRtl;
         final crossAxisFlexStartReversed = constants.isWrapReverse != crossIsRtl;
 
-        // The static-position area in each axis is the container's content box
-        final mainArea = new Line(contentBoxInset.mainStart(dir), containerSize.main(dir) - contentBoxInset.mainEnd(dir));
-        final crossArea = new Line(contentBoxInset.crossStart(dir), containerSize.cross(dir) - contentBoxInset.crossEnd(dir));
+        // The static-position area in each axis is the container's content box (made for the
+        // first out-of-flow child: most containers have none)
+        var mainArea:Null<Line> = null;
+        var crossArea:Null<Line> = null;
 
         final childCount = tree.childCount(node);
         for (order in 0...childCount) {
@@ -2587,6 +2598,8 @@ class FlexboxLayout {
             // In-flow item: merge the candidates bubbled out of its subtree
             if (!position.isOutOfFlow()) {
                 if (itemIndex < itemCount && flexItems[itemIndex].order == order) {
+                    if (candidates == null)
+                        candidates = new OofCandidates();
                     candidates.append(flexItems[itemIndex].oofCandidates);
                     itemIndex++;
                     while (itemIndex < itemCount && flexItems[itemIndex].oofCandidates.isEmpty())
@@ -2610,6 +2623,10 @@ class FlexboxLayout {
             // cross-axis `align-self` does so). Matching the layout authority over a strict
             // spec read keeps gentest fixtures green; reconsider if Chromium changes behavior.
             final mainEdge = mainStaticEdge(constants.justifyContent.keyword, mainAxisFlexStartReversed, mainIsRtl);
+            if (mainArea == null) {
+                mainArea = new Line(contentBoxInset.mainStart(dir), containerSize.main(dir) - contentBoxInset.mainEnd(dir));
+                crossArea = new Line(contentBoxInset.crossStart(dir), containerSize.cross(dir) - contentBoxInset.crossEnd(dir));
+            }
 
             // Cross-axis static position (align-self).
             final cross = new AxisStaticPosition(
@@ -2623,8 +2640,11 @@ class FlexboxLayout {
             final main = new AxisStaticPosition(mainArea, AxisStaticAlign.fromKeyword(mainEdge));
 
             final staticPosition = constants.isRow ? new PointOf<AxisStaticPosition>(main, cross) : new PointOf<AxisStaticPosition>(cross, main);
+            if (candidates == null)
+                candidates = new OofCandidates();
             candidates.push(new OofCandidate(child, order, position, staticPosition));
         }
+        return candidates != null ? candidates : OofCandidates.EMPTY;
     }
 
     /**

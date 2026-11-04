@@ -59,22 +59,22 @@ class SizeOf<T> {
     }
 
     /** Applies the function `f` to both the width and height */
-    public inline function map<R>(f:T->R):SizeOf<R> {
+    public inline function map<R>(f:(T) -> R):SizeOf<R> {
         return new SizeOf<R>(f(width), f(height));
     }
 
     /** Applies the function `f` to the width */
-    public inline function mapWidth(f:T->T):SizeOf<T> {
+    public inline function mapWidth(f:(T) -> T):SizeOf<T> {
         return new SizeOf<T>(f(width), height);
     }
 
     /** Applies the function `f` to the height */
-    public inline function mapHeight(f:T->T):SizeOf<T> {
+    public inline function mapHeight(f:(T) -> T):SizeOf<T> {
         return new SizeOf<T>(width, f(height));
     }
 
     /** Applies the function `f` to both the width and height of this value and another passed value */
-    public inline function zipMap<O, R>(other:SizeOf<O>, f:T->O->R):SizeOf<R> {
+    public inline function zipMap<O, R>(other:SizeOf<O>, f:(T, O) -> R):SizeOf<R> {
         return new SizeOf<R>(f(width, other.width), f(height, other.height));
     }
 
@@ -107,12 +107,12 @@ class SizeOf<T> {
     }
 
     /** Return a copy with the main axis mapped through `mapper` */
-    public inline function mapMain(direction:FlexDirection, mapper:T->T):SizeOf<T> {
+    public inline function mapMain(direction:FlexDirection, mapper:(T) -> T):SizeOf<T> {
         return direction.isRow() ? new SizeOf<T>(mapper(width), height) : new SizeOf<T>(width, mapper(height));
     }
 
     /** Return a copy with the cross axis mapped through `mapper` */
-    public inline function mapCross(direction:FlexDirection, mapper:T->T):SizeOf<T> {
+    public inline function mapCross(direction:FlexDirection, mapper:(T) -> T):SizeOf<T> {
         return direction.isRow() ? new SizeOf<T>(width, mapper(height)) : new SizeOf<T>(mapper(width), height);
     }
 

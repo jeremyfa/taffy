@@ -36,7 +36,7 @@ class PointOpt {
     }
 
     /** Applies the function `f` to both the x and y */
-    public inline function map(f:OptionalFloat->OptionalFloat):PointOpt {
+    public inline function map(f:(OptionalFloat) -> OptionalFloat):PointOpt {
         return new PointOpt(f(x), f(y));
     }
 

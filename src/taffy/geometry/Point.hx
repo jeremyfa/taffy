@@ -40,7 +40,7 @@ class Point {
         return new Point(x - rhs.x, y - rhs.y);
     }
 
-    public inline function map(f:Float->Float):Point {
+    public inline function map(f:(Float) -> Float):Point {
         return new Point(f(x), f(y));
     }
 

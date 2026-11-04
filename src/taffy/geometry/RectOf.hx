@@ -41,12 +41,12 @@ class RectOf<T> {
     }
 
     /** Applies the function `f` to all four sides of the rect */
-    public inline function map<R>(f:T->R):RectOf<R> {
+    public inline function map<R>(f:(T) -> R):RectOf<R> {
         return new RectOf<R>(f(left), f(right), f(top), f(bottom));
     }
 
     /** Applies `f` to each side with the matching component of `size` (width for left/right, height for top/bottom) */
-    public inline function zipSize<U, R>(size:SizeOf<U>, f:T->U->R):RectOf<R> {
+    public inline function zipSize<U, R>(size:SizeOf<U>, f:(T, U) -> R):RectOf<R> {
         return new RectOf<R>(f(left, size.width), f(right, size.width), f(top, size.height), f(bottom, size.height));
     }
 

@@ -32,9 +32,9 @@ class TestCase {
 
     public final name:String;
 
-    public final fn:Void->Void;
+    public final fn:() -> Void;
 
-    public function new(name:String, fn:Void->Void) {
+    public function new(name:String, fn:() -> Void) {
         this.name = name;
         this.fn = fn;
     }
@@ -142,14 +142,14 @@ class TestHelpers {
     // Style helpers
 
     /** Build a style: `st(s -> { s.display = Block; })` (Rust `Style { display: Display::Block, ..Default::default() }`) */
-    public static function st(init:Style->Void):Style {
+    public static function st(init:(Style) -> Void):Style {
         final s = new Style();
         init(s);
         return s;
     }
 
     /** Build a style from a copy of `base` (Rust `Style { ..., ..base }`) */
-    public static function stFrom(base:Style, init:Style->Void):Style {
+    public static function stFrom(base:Style, init:(Style) -> Void):Style {
         final s = base.clone();
         init(s);
         return s;

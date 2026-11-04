@@ -114,7 +114,7 @@ class AvailableSpaceTools {
     }
 
     /** If self is definite, map the value through `mapFunction` */
-    public static inline function mapDefiniteValue(self:AvailableSpace, mapFunction:Float->Float):AvailableSpace {
+    public static inline function mapDefiniteValue(self:AvailableSpace, mapFunction:(Float) -> Float):AvailableSpace {
         return self.isDefinite() ? AvailableSpace.Definite(mapFunction(self.definiteValue())) : self;
     }
 

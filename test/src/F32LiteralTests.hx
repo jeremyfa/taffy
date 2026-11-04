@@ -12,7 +12,7 @@ import taffy.util.F32;
 class F32LiteralTests {
 
     public static function run():{passed:Int, total:Int, failures:Array<String>} {
-        final tests:Array<{name:String, fn:Void->Void}> = [
+        final tests:Array<{name:String, fn:() -> Void}> = [
             {name: "probe_literals_are_f32", fn: probeLiteralsAreF32},
             #if taffy_literal_check
             {name: "every_taffy_literal_is_f32", fn: everyTaffyLiteralIsF32},

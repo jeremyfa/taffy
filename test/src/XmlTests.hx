@@ -496,7 +496,7 @@ class XmlTests {
         return AlignItems.parse(input);
     }
 
-    static function parseOr<T>(input:Null<String>, parse:String->Null<T>, fallback:T):T {
+    static function parseOr<T>(input:Null<String>, parse:(String) -> Null<T>, fallback:T):T {
         if (input == null)
             return fallback;
         final result = parse(input);

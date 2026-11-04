@@ -50,7 +50,7 @@ class OptionalFloatTests {
     static var leakedSpaces:Array<AvailableSpace> = [MinContent, MaxContent];
 
     public static function run():{passed:Int, total:Int, failures:Array<String>} {
-        final tests:Array<{name:String, fn:Void->Void}> = [
+        final tests:Array<{name:String, fn:() -> Void}> = [
             {name: "none_is_none", fn: noneIsNone},
             {name: "fround_of_none_is_not_none", fn: froundOfNoneIsNotNone},
             {name: "nan_and_infinities_are_some", fn: nanAndInfinitiesAreSome},

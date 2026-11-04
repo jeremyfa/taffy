@@ -46,7 +46,7 @@ class RectOpt {
     }
 
     /** Applies the function `f` to all four sides of the rect */
-    public inline function map(f:OptionalFloat->OptionalFloat):RectOpt {
+    public inline function map(f:(OptionalFloat) -> OptionalFloat):RectOpt {
         return new RectOpt(f(left), f(right), f(top), f(bottom));
     }
 

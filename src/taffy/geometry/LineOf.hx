@@ -29,7 +29,7 @@ class LineOf<T> {
     }
 
     /** Applies the function `f` to both the start and end */
-    public inline function map<R>(f:T->R):LineOf<R> {
+    public inline function map<R>(f:(T) -> R):LineOf<R> {
         return new LineOf<R>(f(start), f(end));
     }
 

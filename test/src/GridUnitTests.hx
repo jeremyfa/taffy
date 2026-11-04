@@ -63,7 +63,7 @@ class GridUnitTests {
     static final U16_MAX = 65535;
 
     public static function run():{passed:Int, total:Int, failures:Array<String>} {
-        final tests:Array<{name:String, fn:Void->Void}> = [
+        final tests:Array<{name:String, fn:() -> Void}> = [
             // style/grid.rs
             {name: "grid_placement_parser_saturates_numeric_values", fn: gridPlacementParserSaturatesNumericValues},
             {name: "repetition_parser_saturates_numeric_values", fn: repetitionParserSaturatesNumericValues},

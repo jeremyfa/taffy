@@ -31,7 +31,7 @@ class PointOf<T> {
     }
 
     /** Applies the function `f` to both the x and y */
-    public inline function map<R>(f:T->R):PointOf<R> {
+    public inline function map<R>(f:(T) -> R):PointOf<R> {
         return new PointOf<R>(f(x), f(y));
     }
 

@@ -35,7 +35,7 @@ class Line {
         return start + end;
     }
 
-    public inline function map(f:Float->Float):Line {
+    public inline function map(f:(Float) -> Float):Line {
         return new Line(f(start), f(end));
     }
 

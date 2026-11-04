@@ -16,8 +16,9 @@ import taffy.util.OptionalFloat;
  *
  * Immutable: every operation returns a new instance. The only exception are the
  * sizes owned by the pooled child inputs of `LayoutInput` and by the pooled flex
- * items (`FlexItem.ownedSize`), set again when the input or the item is reused
- * (a layout function never keeps its inputs or its items).
+ * items (`FlexItem.ownedSize`) and flex constants (`AlgoConstants.setNodeInnerMain`), set
+ * again when the input, the item or the constants are reused (a layout function never keeps
+ * its inputs, its items or its constants).
  */
 @:structInit
 class SizeOpt {
@@ -34,6 +35,7 @@ class SizeOpt {
     /** Sets both values (only for the sizes owned by `LayoutInput` and the pooled flex items) */
     @:allow(taffy.tree.LayoutInput)
     @:allow(taffy.compute.flexbox.FlexItem)
+    @:allow(taffy.compute.flexbox.AlgoConstants)
     inline function set(width:OptionalFloat, height:OptionalFloat):Void {
         this.width = width;
         this.height = height;

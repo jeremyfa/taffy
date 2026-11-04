@@ -13,6 +13,7 @@ import taffy.style.AlignItems;
 import taffy.style.Direction;
 import taffy.style.FlexDirection;
 import taffy.geometry.SizeOpt;
+import taffy.util.OptionalFloat;
 
 /**
  * Values that can be cached during the flexbox algorithm
@@ -120,6 +121,30 @@ class AlgoConstants {
     public final innerContainerSize:FlexItemSize = new FlexItemSize();
 
     public function new() {}
+
+    /** Sizes owned by these constants, changed in place by `setNodeInnerMain` / `setNodeOuterMain` */
+    final ownNodeInnerSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+    final ownNodeOuterSize:SizeOpt = new SizeOpt(OptionalFloat.NONE, OptionalFloat.NONE);
+
+    /** `nodeInnerSize = nodeInnerSize.withMain(dir, value)` without allocating */
+    public inline function setNodeInnerMain(value:OptionalFloat):Void {
+        final current = nodeInnerSize;
+        final isRow = dir.isRow();
+        final width = isRow ? value : current.width;
+        final height = isRow ? current.height : value;
+        ownNodeInnerSize.set(width, height);
+        nodeInnerSize = ownNodeInnerSize;
+    }
+
+    /** `nodeOuterSize = nodeOuterSize.withMain(dir, value)` without allocating */
+    public inline function setNodeOuterMain(value:OptionalFloat):Void {
+        final current = nodeOuterSize;
+        final isRow = dir.isRow();
+        final width = isRow ? value : current.width;
+        final height = isRow ? current.height : value;
+        ownNodeOuterSize.set(width, height);
+        nodeOuterSize = ownNodeOuterSize;
+    }
 
     /**
      * When a multi-line container requests a minimum number of lines (`flex-line-count`),

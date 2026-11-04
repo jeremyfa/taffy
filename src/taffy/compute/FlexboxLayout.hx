@@ -297,8 +297,8 @@ class FlexboxLayout {
         else {
             // Sets constants.containerSize and constants.outerContainerSize
             determineContainerMainSize(tree, availableSpace, flexLines, constants);
-            constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.some(constants.innerContainerSize.main(constants.dir)));
-            constants.nodeOuterSize = constants.nodeOuterSize.withMain(constants.dir, OptionalFloat.some(constants.containerSize.main(constants.dir)));
+            constants.setNodeInnerMain(OptionalFloat.some(constants.innerContainerSize.main(constants.dir)));
+            constants.setNodeOuterMain(OptionalFloat.some(constants.containerSize.main(constants.dir)));
 
             // Re-resolve percentage gaps
             final style = tree.getFlexboxContainerStyle(node);
@@ -1249,7 +1249,7 @@ class FlexboxLayout {
         final innerMainSize = Sys.f32Max(outerMainSize - mainContentBoxInset, 0.0);
         constants.containerSize.setMain(constants.dir, outerMainSize);
         constants.innerContainerSize.setMain(constants.dir, innerMainSize);
-        constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.some(innerMainSize));
+        constants.setNodeInnerMain(OptionalFloat.some(innerMainSize));
     }
 
     /** The `unwrap_or_else` closure of `determine_container_main_size` */

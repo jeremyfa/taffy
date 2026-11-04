@@ -55,6 +55,10 @@ class FlexItemSize {
     }
 
     /** Both axes as a (new) `SizeOpt` */
+    public inline function toSize():taffy.geometry.Size {
+        return new taffy.geometry.Size(width, height);
+    }
+
     public inline function toOptions():SizeOpt {
         return new SizeOpt(OptionalFloat.some(width), OptionalFloat.some(height));
     }

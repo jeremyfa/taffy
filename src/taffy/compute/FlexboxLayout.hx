@@ -291,8 +291,8 @@ class FlexboxLayout {
         if (innerMain.isSome()) {
             final innerMainSize:Float = innerMain.unwrap();
             final outerMainSize = innerMainSize + constants.contentBoxInset.mainAxisSum(constants.dir);
-            constants.innerContainerSize = constants.innerContainerSize.withMain(constants.dir, innerMainSize);
-            constants.containerSize = constants.containerSize.withMain(constants.dir, outerMainSize);
+            constants.innerContainerSize.setMain(constants.dir, innerMainSize);
+            constants.containerSize.setMain(constants.dir, outerMainSize);
         }
         else {
             // Sets constants.containerSize and constants.outerContainerSize
@@ -364,7 +364,7 @@ class FlexboxLayout {
         // We have the container size.
         // If our caller does not care about performing layout we are done now.
         if (runMode == RunMode.ComputeSize) {
-            return LayoutOutput.fromOuterSize(constants.containerSize);
+            return LayoutOutput.fromOuterSize(constants.containerSize.toSize());
         }
 
         // 16. Align all flex lines per align-content.
@@ -386,7 +386,7 @@ class FlexboxLayout {
             0.0,
             constants.scrollbarGutter.y
         ));
-        final absolutePositionArea = constants.containerSize.sub(absolutePositionInset.sumAxes());
+        final absolutePositionArea = constants.containerSize.toSize().sub(absolutePositionInset.sumAxes());
         final absolutePositionOffset = new Point(absolutePositionInset.left, absolutePositionInset.top);
 
         final len = tree.childCount(node);
@@ -437,7 +437,7 @@ class FlexboxLayout {
         }
 
         final output = LayoutOutput.fromSizesAndBaselines(
-            constants.containerSize,
+            constants.containerSize.toSize(),
             inflowOverflowRect,
             Baselines.fromFirst(firstVerticalBaseline)
         );
@@ -549,8 +549,8 @@ class FlexboxLayout {
         c.hasDefiniteMainSize = hasDefiniteMainSize;
         c.hasDefiniteCrossSize = hasDefiniteCrossSize;
         c.crossAxisAvailableSpaceIsDefinite = crossAxisAvailableSpaceIsDefinite;
-        c.containerSize = Size.ZERO;
-        c.innerContainerSize = Size.ZERO;
+        c.containerSize.clear();
+        c.innerContainerSize.clear();
         return c;
     }
 
@@ -1231,8 +1231,8 @@ class FlexboxLayout {
         );
 
         final innerMainSize = Sys.f32Max(outerMainSize - mainContentBoxInset, 0.0);
-        constants.containerSize = constants.containerSize.withMain(constants.dir, outerMainSize);
-        constants.innerContainerSize = constants.innerContainerSize.withMain(constants.dir, innerMainSize);
+        constants.containerSize.setMain(constants.dir, outerMainSize);
+        constants.innerContainerSize.setMain(constants.dir, innerMainSize);
         constants.nodeInnerSize = constants.nodeInnerSize.withMain(constants.dir, OptionalFloat.some(innerMainSize));
     }
 
@@ -2233,8 +2233,8 @@ class FlexboxLayout {
         );
         final innerContainerSize = Sys.f32Max(outerContainerSize - paddingBorderSum, 0.0);
 
-        constants.containerSize = constants.containerSize.withCross(dir, outerContainerSize);
-        constants.innerContainerSize = constants.innerContainerSize.withCross(dir, innerContainerSize);
+        constants.containerSize.setCross(dir, outerContainerSize);
+        constants.innerContainerSize.setCross(dir, innerContainerSize);
 
         return totalLineCrossSize;
     }

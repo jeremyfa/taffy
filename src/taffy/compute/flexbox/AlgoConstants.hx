@@ -110,11 +110,14 @@ class AlgoConstants {
      */
     public var crossAxisAvailableSpaceIsDefinite:Bool;
 
-    /** The size of the virtual container containing the flex items. */
-    public var containerSize:Size;
+    /**
+     * The size of the virtual container containing the flex items (changed
+     * in place: one object per `AlgoConstants`, not one per update)
+     */
+    public final containerSize:FlexItemSize = new FlexItemSize();
 
-    /** The size of the internal container */
-    public var innerContainerSize:Size;
+    /** The size of the internal container (changed in place) */
+    public final innerContainerSize:FlexItemSize = new FlexItemSize();
 
     public function new() {}
 

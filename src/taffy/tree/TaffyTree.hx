@@ -68,8 +68,15 @@ class NodeData<NodeContext> {
     /** The context data of the node (when `hasContext` is true) */
     public var context:Null<NodeContext> = null;
 
+    /**
+     * An empty list shared by the nodes without children or hoisted children
+     * (nothing allocated per node): `ownChildren()` and `addHoistedChildren()`
+     * give a node its own list before adding to it.
+     */
+    public static final NO_NODES:Array<NodeId> = [];
+
     /** The out-of-flow (absolute/fixed) boxes whose containing block is this node */
-    public var hoistedChildren:Array<NodeId> = [];
+    public var hoistedChildren:Array<NodeId> = NO_NODES;
 
     /** The cached results of the layout computation */
     public final cache:Cache = new Cache();
@@ -77,14 +84,24 @@ class NodeData<NodeContext> {
     /** The detailed layout information (grid tracks...) */
     public var detailedLayoutInfo:DetailedLayoutInfo = DetailedLayoutInfo.None;
 
-    /** The children of the node */
-    public var children:Array<NodeId> = [];
+    /** The children of the node (never changed in place while it is `NO_NODES`) */
+    public var children:Array<NodeId> = NO_NODES;
 
     /** The parent of the node, or -1 */
     public var parent:Int = -1;
 
     public function new(style:Style) {
         this.style = style;
+    }
+
+    /** The children, as a list of this node's own (to add to it) */
+    public inline function ownChildren():Array<NodeId> {
+        var list = children;
+        if (list == NO_NODES) {
+            list = [];
+            children = list;
+        }
+        return list;
     }
 
     /** Marks a node and all of its ancestors as requiring relayout */
@@ -239,7 +256,7 @@ class TaffyTree<NodeContext> {
     /** Adds a `child` node under the supplied `parent` */
     public function addChild(parent:NodeId, child:NodeId):Void {
         node(child).parent = parent;
-        node(parent).children.push(child);
+        node(parent).ownChildren().push(child);
         markDirty(parent);
     }
 
@@ -252,7 +269,7 @@ class TaffyTree<NodeContext> {
         if (childIndex > childCount)
             throw ChildIndexOutOfBounds(parent, childIndex, childCount);
         node(child).parent = parent;
-        parentData.children.insert(childIndex, child);
+        parentData.ownChildren().insert(childIndex, child);
         markDirty(parent);
     }
 
@@ -440,6 +457,26 @@ class TaffyTree<NodeContext> {
         taffyView.measureFunction = null;
     }
 
+    /**
+     * `computeLayoutWithMeasure()` with the measure function given as an
+     * object (a typed call per leaf instead of a call through a function
+     * value)
+     */
+    public function computeLayoutWithMeasurer(nodeId:NodeId, availableSpace:SizeAvail, measurer:LayoutMeasurer<NodeContext>):Void {
+        node(nodeId);
+        var taffyView = view;
+        if (taffyView == null) {
+            taffyView = new TaffyView<NodeContext>(this);
+            view = taffyView;
+        }
+        taffyView.measurer = measurer;
+        Compute.computeRootLayout(taffyView, nodeId, availableSpace);
+        if (useRounding) {
+            Compute.roundLayout(taffyView, nodeId);
+        }
+        taffyView.measurer = null;
+    }
+
     /** Updates the stored layout of the provided `node` and its children (leaves are measured as zero size) */
     public function computeLayout(nodeId:NodeId, availableSpace:SizeAvail):Void {
         computeLayoutWithMeasure(nodeId, availableSpace, defaultMeasure);
@@ -477,6 +514,9 @@ class TaffyView<NodeContext>
 
     /** The measure function used to lay out leaves */
     var measureFunction:Null<MeasureFunction<NodeContext>> = null;
+
+    /** The measure object used to lay out leaves, instead of `measureFunction` when set */
+    var measurer:Null<LayoutMeasurer<NodeContext>> = null;
 
     public function new(taffy:TaffyTree<NodeContext>) {
         this.taffy = taffy;
@@ -543,7 +583,8 @@ class TaffyView<NodeContext>
         else if (!hasChildren) {
             final style = nodeData.style;
             final nodeContext = nodeData.hasContext ? nodeData.context : null;
-            measureFunction(inputs, nodeId, nodeContext, style);
+            final measurer = this.measurer;
+            measurer != null ? measurer.measureLeafNode(inputs, nodeId, nodeContext, style) : measureFunction(inputs, nodeId, nodeContext, style);
         }
         else switch displayMode {
             case Block: BlockLayout.computeBlockLayout(this, nodeId, inputs, blockCtx);
@@ -571,11 +612,18 @@ class TaffyView<NodeContext>
     public function clearHoistedChildren(nodeId:NodeId):Void {
         final d = data(nodeId);
         if (d.hoistedChildren.length > 0)
-            d.hoistedChildren = [];
+            d.hoistedChildren = NodeData.NO_NODES;
     }
 
     public function addHoistedChildren(nodeId:NodeId, hoisted:Array<NodeId>):Void {
-        final list = data(nodeId).hoistedChildren;
+        if (hoisted.length == 0)
+            return;
+        final d = data(nodeId);
+        var list = d.hoistedChildren;
+        if (list == NodeData.NO_NODES) {
+            list = [];
+            d.hoistedChildren = list;
+        }
         for (h in hoisted)
             list.push(h);
     }

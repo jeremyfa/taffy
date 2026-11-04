@@ -262,6 +262,13 @@ class XmlTests {
                 return new FixtureResult(false, "RELAYOUT WITH CACHE DIFFERS\n" + first.toString() + "CACHED\n" + cached.toString());
             if (dirty.toString() != first.toString())
                 return new FixtureResult(false, "RELAYOUT AFTER MARKING DIRTY DIFFERS\n" + first.toString() + "DIRTY\n" + dirty.toString());
+            // The same layout with the measure function given as an object
+            markAllDirty(tree, rootNodeId);
+            tree.computeLayoutWithMeasurer(rootNodeId, availableSpace, new TestMeasurer());
+            final measurer = new StringBuf();
+            getComputedExpectations(tree, rootNodeId).writeTree(measurer, "  ");
+            if (measurer.toString() != first.toString())
+                return new FixtureResult(false, "RELAYOUT WITH A MEASURER DIFFERS\n" + first.toString() + "MEASURER\n" + measurer.toString());
         }
         if (expected.matches(actual))
             return new FixtureResult(true, "");
@@ -571,6 +578,17 @@ class TrackListToken {
     public function new(names:Null<String>, size:Null<Float>) {
         this.names = names;
         this.size = size;
+    }
+
+}
+
+/** `testMeasureFunction` as a `LayoutMeasurer` (`TaffyTree.computeLayoutWithMeasurer`) */
+private class TestMeasurer implements taffy.tree.LayoutMeasurer<TestNodeContext> {
+
+    public function new() {}
+
+    public function measureLeafNode(inputs:taffy.tree.LayoutInput, nodeId:taffy.tree.NodeId, nodeContext:TestNodeContext, style:taffy.style.Style):taffy.tree.LayoutOutput {
+        return XmlTests.testMeasureFunction(inputs, nodeId, nodeContext, style);
     }
 
 }

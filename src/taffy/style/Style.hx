@@ -131,16 +131,16 @@ class Style {
     public var flexShrink:Float = 1.0;
 
     /** Defines the track sizing functions (heights) of the grid rows */
-    public var gridTemplateRows:Array<GridTemplateComponent> = [];
+    public var gridTemplateRows:Array<GridTemplateComponent> = NO_TEMPLATE_ROWS;
 
     /** Defines the track sizing functions (widths) of the grid columns */
-    public var gridTemplateColumns:Array<GridTemplateComponent> = [];
+    public var gridTemplateColumns:Array<GridTemplateComponent> = NO_TEMPLATE_COLUMNS;
 
     /** Defines the size of implicitly created rows */
-    public var gridAutoRows:Array<TrackSizingFunction> = [];
+    public var gridAutoRows:Array<TrackSizingFunction> = NO_AUTO_ROWS;
 
     /** Defines the size of implicitly created columns */
-    public var gridAutoColumns:Array<TrackSizingFunction> = [];
+    public var gridAutoColumns:Array<TrackSizingFunction> = NO_AUTO_COLUMNS;
 
     /** Controls how items get placed into the grid for auto-placed items */
     public var gridAutoFlow:GridAutoFlow = GridAutoFlow.Row;
@@ -149,10 +149,10 @@ class Style {
     public var gridTemplateAreas:Null<GridTemplateAreas> = null;
 
     /** The named lines between the columns */
-    public var gridTemplateColumnNames:Array<Array<String>> = [];
+    public var gridTemplateColumnNames:Array<Array<String>> = NO_COLUMN_NAMES;
 
     /** The named lines between the rows */
-    public var gridTemplateRowNames:Array<Array<String>> = [];
+    public var gridTemplateRowNames:Array<Array<String>> = NO_ROW_NAMES;
 
     /** Defines which row in the grid the item should start and end at */
     public var gridRow:LineOf<GridPlacement> = DEFAULT_GRID_PLACEMENT;
@@ -168,6 +168,15 @@ class Style {
     static final DEFAULT_PADDING_BORDER:RectOf<LengthPercentage> = new RectOf<LengthPercentage>(LengthPercentage.ZERO, LengthPercentage.ZERO, LengthPercentage.ZERO, LengthPercentage.ZERO);
     static final DEFAULT_GAP:SizeOf<LengthPercentage> = new SizeOf<LengthPercentage>(LengthPercentage.ZERO, LengthPercentage.ZERO);
     static final DEFAULT_GRID_PLACEMENT:LineOf<GridPlacement> = new LineOf<GridPlacement>(GridPlacement.Auto, GridPlacement.Auto);
+
+    // Shared empty grid lists (no allocation per style, like the defaults
+    // above): a style sets a new array, it never changes these in place
+    static final NO_TEMPLATE_ROWS:Array<GridTemplateComponent> = [];
+    static final NO_TEMPLATE_COLUMNS:Array<GridTemplateComponent> = [];
+    static final NO_AUTO_ROWS:Array<TrackSizingFunction> = [];
+    static final NO_AUTO_COLUMNS:Array<TrackSizingFunction> = [];
+    static final NO_COLUMN_NAMES:Array<Array<String>> = [];
+    static final NO_ROW_NAMES:Array<Array<String>> = [];
 
     /** A shared default style. Do not mutate it. */
     public static final DEFAULT:Style = new Style();

@@ -145,7 +145,10 @@ class TaffyTree<NodeContext> {
     function insert(data:NodeData<NodeContext>):NodeId {
         nodeCount++;
         if (freeIds.length > 0) {
-            final id = freeIds.pop();
+            // Not `pop()`: on hxcpp it returns the Int boxed (allocated above 255)
+            final last = freeIds.length - 1;
+            final id = freeIds[last];
+            freeIds.resize(last);
             nodes[id] = data;
             return id;
         }

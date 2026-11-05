@@ -102,7 +102,7 @@ class Compute {
                 direction,
                 // The initial containing block is not a scroll container
                 new PointOf<Overflow>(Visible, Visible),
-                null,
+                -1,
                 (_, inputs) -> rootIsCached = tree.cacheGet(root, inputs) != null
             );
             layout = boxLayout.layout;

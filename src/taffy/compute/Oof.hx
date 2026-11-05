@@ -463,7 +463,8 @@ class Oof {
      *
      * - `areaSize`/`areaOffset` describe the inset-resolution area of the containing block, relative to its border box.
      * - `containerOverflow` is the `overflow` style of the containing block.
-     * - `gridOwner` is the node whose detailed layout info is consulted for grid placement (or null).
+     * - `gridOwner` is the node whose detailed layout info is consulted for grid placement (or -1;
+     *   an Int rather than a `Null<NodeId>`, which boxes the id on hxcpp).
      * - `beforeLayout` is called with the inputs of the final layout pass just before it runs (may be null).
      */
     public static function layoutOofBox(
@@ -473,14 +474,14 @@ class Oof {
         areaOffset:Point,
         direction:Direction,
         containerOverflow:PointOf<Overflow>,
-        gridOwner:Null<NodeId>,
+        gridOwner:Int,
         beforeLayout:Null<(LayoutContainingBlock, LayoutInput) -> Void>
     ):OofBoxLayout {
         final childStyle = tree.getOofItemStyle(candidate.node);
 
         // If the current node is a grid container then the box is positioned relative to the
         // grid area determined by its grid-placement properties
-        if (gridOwner != null) {
+        if (gridOwner != -1) {
             switch tree.getDetailedLayoutInfo(gridOwner) {
                 case Grid(gridInfo):
                     final areaRect = new Rect(areaOffset.x, areaOffset.x + areaSize.width, areaOffset.y, areaOffset.y + areaSize.height);
@@ -587,7 +588,8 @@ class Oof {
         final stretchWidth = knownDimensions.width.isNone() && horizontal.isStretchSized(isReplaced, isTable);
         final stretchHeight = knownDimensions.height.isNone() && vertical.isStretchSized(isReplaced, isTable);
         final bothExplicitStretch = horizontal.alignment == Stretch && vertical.alignment == Stretch;
-        final stretchAspectRatio = (stretchWidth && stretchHeight && bothExplicitStretch) ? null : aspectRatio;
+        // Rust `None`: `OptionalFloat.NONE` (a `null` here became a ratio of 0 on hxcpp, and boxed)
+        final stretchAspectRatio = (stretchWidth && stretchHeight && bothExplicitStretch) ? OptionalFloat.NONE : aspectRatio;
         if (stretchWidth) {
             if (isTable) {
                 // A table cannot be stretched smaller than its content: stretch-fit is a minimum

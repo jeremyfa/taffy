@@ -200,6 +200,22 @@ class TaffyTree<NodeContext> {
         return id;
     }
 
+    /**
+     * `newWithChildren()` keeping `children` as the node's child list instead
+     * of a copy: the caller gives the array away (it may still read it, never
+     * change it). Not in Rust taffy.
+     */
+    @:noCompletion
+    public function newWithChildrenOwned(layout:Style, children:Array<NodeId>):NodeId {
+        final data = new NodeData<NodeContext>(layout);
+        final id = insert(data);
+        for (child in children) {
+            node(child).parent = id;
+        }
+        data.children = children;
+        return id;
+    }
+
     /** Drops all nodes in the tree */
     public function clear():Void {
         nodes = [];

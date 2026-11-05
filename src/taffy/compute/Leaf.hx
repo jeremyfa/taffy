@@ -38,7 +38,17 @@ typedef LeafMeasureFunction = (knownDimensions:SizeOpt, availableSpace:SizeAvail
  */
 interface LeafMeasurer {
 
-    function measureLeafSize(knownWidth:OptionalFloat, knownHeight:OptionalFloat, availableWidth:AvailableSpace, availableHeight:AvailableSpace):Size;
+    /**
+     * Measures the leaf; the size is read back with `measuredWidth()` and
+     * `measuredHeight()` (no size object per measure)
+     */
+    function measureLeafSize(knownWidth:OptionalFloat, knownHeight:OptionalFloat, availableWidth:AvailableSpace, availableHeight:AvailableSpace):Void;
+
+    /** The width of the last `measureLeafSize()` */
+    function measuredWidth():Float;
+
+    /** The height of the last `measureLeafSize()` */
+    function measuredHeight():Float;
 
 }
 
@@ -161,12 +171,21 @@ class Leaf {
             case PerformLayout: SizeOpt.NONE;
             case PerformHiddenLayout: throw 'unreachable';
         };
-        final measuredSize = measurer != null
-            ? measurer.measureLeafSize(measureKnownDimensions.width, measureKnownDimensions.height, measureAvailableWidth, measureAvailableHeight)
-            : measureFunction(measureKnownDimensions, new SizeAvail(measureAvailableWidth, measureAvailableHeight));
+        var measuredWidth:Float;
+        var measuredHeight:Float;
+        if (measurer != null) {
+            measurer.measureLeafSize(measureKnownDimensions.width, measureKnownDimensions.height, measureAvailableWidth, measureAvailableHeight);
+            measuredWidth = measurer.measuredWidth();
+            measuredHeight = measurer.measuredHeight();
+        }
+        else {
+            final measuredSize = measureFunction(measureKnownDimensions, new SizeAvail(measureAvailableWidth, measureAvailableHeight));
+            measuredWidth = measuredSize.width;
+            measuredHeight = measuredSize.height;
+        }
         final clampedSize = knownDimensions
             .or(nodeSize)
-            .unwrapOr(measuredSize.add(contentBoxInset.sumAxes()))
+            .unwrapOr(new Size(measuredWidth, measuredHeight).add(contentBoxInset.sumAxes()))
             .maybeClamp(nodeMinSize, nodeMaxSize);
         final size = new Size(
             clampedSize.width,
@@ -182,9 +201,9 @@ class Leaf {
         final endPadding = isRtl ? padding.left : padding.right;
         final scrollableOverflowRect = new Rect(
             0.0,
-            startPadding + measuredSize.width + (isScrollContainer ? endPadding : 0.0),
+            startPadding + measuredWidth + (isScrollContainer ? endPadding : 0.0),
             0.0,
-            padding.top + measuredSize.height + (isScrollContainer ? padding.bottom : 0.0)
+            padding.top + measuredHeight + (isScrollContainer ? padding.bottom : 0.0)
         );
 
         return new LayoutOutput(
@@ -193,7 +212,7 @@ class Leaf {
             Baselines.NONE,
             CollapsibleMarginSet.ZERO,
             CollapsibleMarginSet.ZERO,
-            !hasStylesPreventingBeingCollapsedThrough && size.height == 0.0 && measuredSize.height == 0.0
+            !hasStylesPreventingBeingCollapsedThrough && size.height == 0.0 && measuredHeight == 0.0
         );
     }
 

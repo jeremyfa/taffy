@@ -600,18 +600,33 @@ private class TestMeasurer implements taffy.tree.LayoutMeasurer<TestNodeContext>
         return output;
     }
 
+    var lastWidth:Float = 0.0;
+    var lastHeight:Float = 0.0;
+
     /** The measure of `testMeasureFunction` */
-    public function measureLeafSize(knownWidth:taffy.util.OptionalFloat, knownHeight:taffy.util.OptionalFloat, availableWidth:taffy.style.AvailableSpace, availableHeight:taffy.style.AvailableSpace):Size {
-        if (knownWidth.isSome() && knownHeight.isSome())
-            return new Size(knownWidth.unwrap(), knownHeight.unwrap());
-        if (context == null)
-            return new Size(knownWidth.isSome() ? knownWidth.unwrap() : 0.0, knownHeight.isSome() ? knownHeight.unwrap() : 0.0);
+    public function measureLeafSize(knownWidth:taffy.util.OptionalFloat, knownHeight:taffy.util.OptionalFloat, availableWidth:taffy.style.AvailableSpace, availableHeight:taffy.style.AvailableSpace):Void {
+        if (knownWidth.isSome() && knownHeight.isSome()) {
+            lastWidth = knownWidth.unwrap();
+            lastHeight = knownHeight.unwrap();
+            return;
+        }
+        if (context == null) {
+            lastWidth = knownWidth.isSome() ? knownWidth.unwrap() : 0.0;
+            lastHeight = knownHeight.isSome() ? knownHeight.unwrap() : 0.0;
+            return;
+        }
         context.count++;
         final computeSize = context.measure(new taffy.geometry.SizeOpt(knownWidth, knownHeight), new taffy.geometry.SizeAvail(availableWidth, availableHeight));
-        return new Size(
-            knownWidth.isSome() ? knownWidth.unwrap() : computeSize.width,
-            knownHeight.isSome() ? knownHeight.unwrap() : computeSize.height
-        );
+        lastWidth = knownWidth.isSome() ? knownWidth.unwrap() : computeSize.width;
+        lastHeight = knownHeight.isSome() ? knownHeight.unwrap() : computeSize.height;
+    }
+
+    public function measuredWidth():Float {
+        return lastWidth;
+    }
+
+    public function measuredHeight():Float {
+        return lastHeight;
     }
 
 }

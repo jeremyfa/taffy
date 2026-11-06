@@ -439,10 +439,22 @@ class NamedLineResolver {
         }
     }
 
+    /** Ascending Ints, as a sign (shared: a closure per call boxes the difference it returns) */
+    static final ASCENDING:(Int, Int) -> Int = (a, b) -> a < b ? -1 : (a > b ? 1 : 0);
+
+    /** The lines `BY_PAIR_LINE` compares (set only during `detailedLineNames`' sort) */
+    static var sortedPairLines:Null<Array<Int>> = null;
+
+    static final BY_PAIR_LINE:(Int, Int) -> Int = (a, b) -> {
+        final x = sortedPairLines[a];
+        final y = sortedPairLines[b];
+        x < y ? -1 : (x > y ? 1 : 0);
+    };
+
     static function sortAndDedup(map:StringMap<Array<Int>>):Void {
         for (key in map.keys()) {
             final lines = map.get(key);
-            lines.sort((a, b) -> a - b);
+            lines.sort(ASCENDING);
             var write = 0;
             for (i in 0...lines.length) {
                 if (i == 0 || lines[i] != lines[write - 1]) {
@@ -474,7 +486,11 @@ class NamedLineResolver {
 
         // Stable sort by line number preserves the source order of names within each line
         final order = [for (i in 0...pairLines.length) i];
-        haxe.ds.ArraySort.sort(order, (a, b) -> pairLines[a] - pairLines[b]);
+        // A sign through a static comparator over `sortedPairLines` (a closure per call,
+        // and a difference returned through the function value is boxed on hxcpp)
+        sortedPairLines = pairLines;
+        haxe.ds.ArraySort.sort(order, BY_PAIR_LINE);
+        sortedPairLines = null;
 
         final lineCount = explicitTrackCount + 1;
         final lineNames = GridLineNames.withCapacity();

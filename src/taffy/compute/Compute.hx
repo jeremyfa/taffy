@@ -317,31 +317,31 @@ class Compute {
         final cumulativeX = cumulativeX + unrounded.location.x;
         final cumulativeY = cumulativeY + unrounded.location.y;
 
-        final round = Sys.round;
-        final location = new Point(round(cumulativeX) - round(parentX), round(cumulativeY) - round(parentY));
+        // `Sys.round` called directly: a local function value boxes every Float it gets and returns on hxcpp
+        final location = new Point(Sys.round(cumulativeX) - Sys.round(parentX), Sys.round(cumulativeY) - Sys.round(parentY));
         final size = new Size(
-            round(cumulativeX + unrounded.size.width) - round(cumulativeX),
-            round(cumulativeY + unrounded.size.height) - round(cumulativeY)
+            Sys.round(cumulativeX + unrounded.size.width) - Sys.round(cumulativeX),
+            Sys.round(cumulativeY + unrounded.size.height) - Sys.round(cumulativeY)
         );
-        final scrollbarSize = new Size(round(unrounded.scrollbarSize.width), round(unrounded.scrollbarSize.height));
+        final scrollbarSize = new Size(Sys.round(unrounded.scrollbarSize.width), Sys.round(unrounded.scrollbarSize.height));
         final border = new Rect(
-            round(cumulativeX + unrounded.border.left) - round(cumulativeX),
-            round(cumulativeX + unrounded.size.width) - round(cumulativeX + unrounded.size.width - unrounded.border.right),
-            round(cumulativeY + unrounded.border.top) - round(cumulativeY),
-            round(cumulativeY + unrounded.size.height) - round(cumulativeY + unrounded.size.height - unrounded.border.bottom)
+            Sys.round(cumulativeX + unrounded.border.left) - Sys.round(cumulativeX),
+            Sys.round(cumulativeX + unrounded.size.width) - Sys.round(cumulativeX + unrounded.size.width - unrounded.border.right),
+            Sys.round(cumulativeY + unrounded.border.top) - Sys.round(cumulativeY),
+            Sys.round(cumulativeY + unrounded.size.height) - Sys.round(cumulativeY + unrounded.size.height - unrounded.border.bottom)
         );
         final padding = new Rect(
-            round(cumulativeX + unrounded.padding.left) - round(cumulativeX),
-            round(cumulativeX + unrounded.size.width) - round(cumulativeX + unrounded.size.width - unrounded.padding.right),
-            round(cumulativeY + unrounded.padding.top) - round(cumulativeY),
-            round(cumulativeY + unrounded.size.height) - round(cumulativeY + unrounded.size.height - unrounded.padding.bottom)
+            Sys.round(cumulativeX + unrounded.padding.left) - Sys.round(cumulativeX),
+            Sys.round(cumulativeX + unrounded.size.width) - Sys.round(cumulativeX + unrounded.size.width - unrounded.padding.right),
+            Sys.round(cumulativeY + unrounded.padding.top) - Sys.round(cumulativeY),
+            Sys.round(cumulativeY + unrounded.size.height) - Sys.round(cumulativeY + unrounded.size.height - unrounded.padding.bottom)
         );
         final so = unrounded.scrollableOverflowRect;
         final scrollableOverflowRect = new Rect(
-            round(cumulativeX + so.left) - round(cumulativeX),
-            round(cumulativeX + so.right) - round(cumulativeX),
-            round(cumulativeY + so.top) - round(cumulativeY),
-            round(cumulativeY + so.bottom) - round(cumulativeY)
+            Sys.round(cumulativeX + so.left) - Sys.round(cumulativeX),
+            Sys.round(cumulativeX + so.right) - Sys.round(cumulativeX),
+            Sys.round(cumulativeY + so.top) - Sys.round(cumulativeY),
+            Sys.round(cumulativeY + so.bottom) - Sys.round(cumulativeY)
         );
 
         tree.setFinalLayout(nodeId, new Layout(unrounded.order, location, size, scrollableOverflowRect, scrollbarSize, border, padding, unrounded.margin));

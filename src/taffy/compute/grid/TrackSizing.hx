@@ -482,12 +482,29 @@ class TrackSizing {
     }
 
     /** 11.5.1 Shim baseline-aligned items so their intrinsic size contributions reflect their baseline alignment. */
+    /** The axis the comparators below read (set right before each sort) */
+    static var sortAxis:AbstractAxis = Inline;
+
+    static final BY_PLACEMENT_START:(GridItem, GridItem) -> Int = (a, b) -> {
+        final x = a.placement(sortAxis).start;
+        final y = b.placement(sortAxis).start;
+        x < y ? -1 : (x > y ? 1 : 0);
+    };
+
+    static final BY_SPAN:(GridItem, GridItem) -> Int = (a, b) -> {
+        final x = a.span(sortAxis);
+        final y = b.span(sortAxis);
+        x < y ? -1 : (x > y ? 1 : 0);
+    };
+
     static function resolveItemBaselines(tree:LayoutPartialTree, axis:AbstractAxis, allItems:Array<GridItem>, innerNodeSize:SizeOpt):Void {
         // Sort items by track in the other axis (row) start position so that we can iterate items in groups which
         // are in the same track in the other axis (row)
         final otherAxis = axis.other();
         final items = allItems.copy();
-        ArraySort.sort(items, (a, b) -> a.placement(otherAxis).start - b.placement(otherAxis).start);
+        // A sign through a static comparator (no closure per call, no boxed difference)
+        sortAxis = otherAxis;
+        ArraySort.sort(items, BY_PLACEMENT_START);
 
         // Iterate over grid rows
         var rowStartIndex = 0;
@@ -600,7 +617,9 @@ class TrackSizing {
         final nonFlexItemCount = frontLen;
         if (needsSort) {
             final nonFlexItems = items.slice(0, nonFlexItemCount);
-            ArraySort.sort(nonFlexItems, (a, b) -> a.span(axis) - b.span(axis));
+            // A sign through a static comparator (no closure per call, no boxed difference)
+            sortAxis = axis;
+            ArraySort.sort(nonFlexItems, BY_SPAN);
             for (i in 0...nonFlexItemCount)
                 items[i] = nonFlexItems[i];
         }

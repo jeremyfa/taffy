@@ -5,7 +5,7 @@ import taffy.util.F32;
 
 /**
  * Micro benchmark for the representation of the absent value of an optional
- * float (see `docs/perf/OPTIONAL_FLOAT.md` in the GPUI port).
+ * float (see `docs/perf/OPTIONAL_FLOAT.md` of glaze-golden).
  *
  * Four representations of `Option<f32>` run the same `maybeMin`, `maybeMax`,
  * `maybeAdd` chain (the hot helpers of `taffy.util.MaybeMath`) over the same

@@ -17,7 +17,7 @@ import taffy.util.OptionalFloat;
  * (`-2e300` and `-3e300`, distinct from `OptionalFloat.NONE`). Every value
  * computed by taffy goes through `F32.fround`, so no f32 arithmetic can
  * produce them; `Definite(NaN)` and `Definite(inf)` stay definite, like
- * upstream. See `docs/perf/OPTIONAL_FLOAT.md` in the GPUI port (section 6)
+ * upstream. See `docs/perf/OPTIONAL_FLOAT.md` of glaze-golden (section 6)
  * for the census behind this choice. The sentinels must never be written as
  * literals anywhere else (the `F32` macro would round them to `-inf`).
  *

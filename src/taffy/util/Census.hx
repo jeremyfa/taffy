@@ -2,7 +2,7 @@ package taffy.util;
 
 /**
  * Instrumentation for the `OptionalFloat` decision (see
- * `docs/perf/OPTIONAL_FLOAT.md` in the GPUI port): counts the values that
+ * `docs/perf/OPTIONAL_FLOAT.md` of glaze-golden): counts the values that
  * reach the optional floats of taffy, to check which representation of the
  * absent value is safe.
  *

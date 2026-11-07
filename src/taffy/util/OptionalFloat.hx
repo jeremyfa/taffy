@@ -14,7 +14,7 @@ package taffy.util;
  * range: every value computed by taffy goes through `F32.fround`, so no f32
  * arithmetic can produce it, and if an absent value ever leaks into
  * arithmetic, the rounding turns it into `-inf` (a visible error, not a
- * plausible number). See `docs/perf/OPTIONAL_FLOAT.md` in the GPUI port for
+ * plausible number). See `docs/perf/OPTIONAL_FLOAT.md` of glaze-golden for
  * the measurements behind this choice.
  *
  * There is deliberately no implicit conversion from `Float`: on hxcpp a

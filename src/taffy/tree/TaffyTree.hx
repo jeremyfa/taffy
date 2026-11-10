@@ -47,11 +47,13 @@ enum TaffyError {
 }
 
 /**
- * Layout information for a given node, stored in a `TaffyTree`
+ * Layout information for a given node, stored in a `TaffyTree`.
+ *
+ * The node is its own layout cache (`cache` returns the node itself): no cache object per node.
  */
 @:allow(taffy.tree.TaffyTree)
 @:allow(taffy.tree.TaffyView)
-class NodeData<NodeContext> {
+class NodeData<NodeContext> extends Cache {
 
     /** The layout strategy used by this node */
     public var style:Style;
@@ -78,8 +80,12 @@ class NodeData<NodeContext> {
     /** The out-of-flow (absolute/fixed) boxes whose containing block is this node */
     public var hoistedChildren:Array<NodeId> = NO_NODES;
 
-    /** The cached results of the layout computation */
-    public final cache:Cache = new Cache();
+    /** The cached results of the layout computation (the node itself) */
+    public var cache(get, never):Cache;
+
+    inline function get_cache():Cache {
+        return this;
+    }
 
     /** The detailed layout information (grid tracks...) */
     public var detailedLayoutInfo:DetailedLayoutInfo = DetailedLayoutInfo.None;
@@ -91,6 +97,7 @@ class NodeData<NodeContext> {
     public var parent:Int = -1;
 
     public function new(style:Style) {
+        super();
         this.style = style;
     }
 

@@ -65,18 +65,24 @@ using taffy.util.Resolve;
  */
 private class InFlowResult {
 
-    public final inflowOverflowRect:Rect;
-    public final contentHeight:Float;
-    public final firstChildTopMarginSet:CollapsibleMarginSet;
-    public final lastChildBottomMarginSet:CollapsibleMarginSet;
-    public final firstBaseline:OptionalFloat;
+    /** The one result, set by each call (its caller reads it right away, before any other layout call) */
+    public static final SCRATCH:InFlowResult = new InFlowResult();
 
-    public function new(inflowOverflowRect:Rect, contentHeight:Float, firstChildTopMarginSet:CollapsibleMarginSet, lastChildBottomMarginSet:CollapsibleMarginSet, firstBaseline:OptionalFloat) {
+    public var inflowOverflowRect:Rect = Rect.ZERO;
+    public var contentHeight:Float = 0.0;
+    public var firstChildTopMarginSet:CollapsibleMarginSet = CollapsibleMarginSet.ZERO;
+    public var lastChildBottomMarginSet:CollapsibleMarginSet = CollapsibleMarginSet.ZERO;
+    public var firstBaseline:OptionalFloat = OptionalFloat.NONE;
+
+    function new() {}
+
+    public inline function set(inflowOverflowRect:Rect, contentHeight:Float, firstChildTopMarginSet:CollapsibleMarginSet, lastChildBottomMarginSet:CollapsibleMarginSet, firstBaseline:OptionalFloat):InFlowResult {
         this.inflowOverflowRect = inflowOverflowRect;
         this.contentHeight = contentHeight;
         this.firstChildTopMarginSet = firstChildTopMarginSet;
         this.lastChildBottomMarginSet = lastChildBottomMarginSet;
         this.firstBaseline = firstBaseline;
+        return this;
     }
 
 }
@@ -174,13 +180,15 @@ class BlockLayout {
         final minMaxDefiniteSize = minMaxDefinite(minSize, maxSize);
 
         final styledKnown = knownDimensions.or(minMaxDefiniteSize).or(clampedStyleSize).maybeMaxSize(paddingBorderSize);
-        final styledBasedKnownDimensions = SizeOpt.shared(styledKnown.width, styledKnown.height);
+        // The styled known dimensions as values: the child input owns their size (`acquireKnownParts`)
+        final styledKnownWidth = styledKnown.width;
+        final styledKnownHeight = styledKnown.height;
 
         // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
         // is ComputeSize (and thus the container's size is all that we're interested in)
         if (runMode == ComputeSize) {
-            final width = styledBasedKnownDimensions.width;
-            final height = styledBasedKnownDimensions.height;
+            final width = styledKnownWidth;
+            final height = styledKnownHeight;
             if (width.isSome() && height.isSome()) {
                 return LayoutOutput.fromOuterSize(new Size(width.unwrap(), height.unwrap()));
             }
@@ -192,7 +200,7 @@ class BlockLayout {
 
         // Unwrap the block formatting context if one was passed, or else create a new one
         // (`inputs.withKnownDimensions(styledBasedKnownDimensions)`, reused)
-        final innerInputs = LayoutInput.acquire(inputs.runMode, inputs.sizingMode, inputs.axis, styledBasedKnownDimensions,
+        final innerInputs = LayoutInput.acquireKnownParts(inputs.runMode, inputs.sizingMode, inputs.axis, styledKnownWidth, styledKnownHeight,
             inputs.knownDimensionsAreDefinite, inputs.parentSize, inputs.availableSpace, inputs.verticalMarginsAreCollapsible);
         final output = if (blockCtx != null && !establishesNewBfc) {
             computeInner(tree, nodeId, innerInputs, blockCtx);
@@ -644,9 +652,9 @@ class BlockLayout {
             item.justifySelf = childStyle.justifySelf;
             item.inset = childStyle.inset;
             item.margin = childStyle.margin;
-            item.padding = Rect.shared(padding.left, padding.right, padding.top, padding.bottom);
-            item.border = Rect.shared(border.left, border.right, border.top, border.bottom);
-            item.paddingBorderSum = Size.shared(pbSum.width, pbSum.height);
+            item.padding = item.ownedRect(0, padding.left, padding.right, padding.top, padding.bottom);
+            item.border = item.ownedRect(1, border.left, border.right, border.top, border.bottom);
+            item.paddingBorderSum = item.ownedPaddingBorderSum(pbSum.width, pbSum.height);
             items.push(item);
             order++;
         }
@@ -835,7 +843,8 @@ class BlockLayout {
                 final itemLayout = tree.performChildLayout(
                     item.nodeId,
                     new SizeOpt(itemKnownWidth, itemKnownHeight),
-                    parentSize,
+                    // A copy: `parentSize` itself stays inline (allocates nothing)
+                    new SizeOpt(parentSize.width, parentSize.height),
                     new SizeAvail(itemAvailableWidth, MaxContent),
                     InherentSize,
                     // A float establishes a new block formatting context: its margins do not
@@ -866,8 +875,8 @@ class BlockLayout {
                     itemLayout.size,
                     itemLayout.scrollableOverflowRect,
                     scrollbarSize,
-                    item.border,
-                    item.padding,
+                    item.layoutRect(item.border),
+                    item.layoutRect(item.padding),
                     // A copy: `itemNonAutoMargin` itself stays inline (allocates nothing)
                     Rect.shared(itemNonAutoMargin.left, itemNonAutoMargin.right, itemNonAutoMargin.top, itemNonAutoMargin.bottom)
                 );
@@ -1253,8 +1262,8 @@ class BlockLayout {
                 itemLayout.size,
                 itemLayout.scrollableOverflowRect,
                 scrollbarSize,
-                item.border,
-                item.padding,
+                item.layoutRect(item.border),
+                item.layoutRect(item.padding),
                 Rect.shared(resolvedMarginLeft, resolvedMarginRight, resolvedMarginTop, resolvedMarginBottom)
             );
 
@@ -1337,7 +1346,7 @@ class BlockLayout {
 
         committedYOffset += resolvedContentBoxInset.bottom + bottomYMarginOffset;
         final contentHeight = Sys.f32Max(0.0, committedYOffset);
-        return new InFlowResult(Rect.shared(overflowLeft, overflowRight, overflowTop, overflowBottom), contentHeight, firstChildTopMarginSet, lastChildBottomMarginSet, firstBaseline);
+        return InFlowResult.SCRATCH.set(Rect.shared(overflowLeft, overflowRight, overflowTop, overflowBottom), contentHeight, firstChildTopMarginSet, lastChildBottomMarginSet, firstBaseline);
     }
 
 }

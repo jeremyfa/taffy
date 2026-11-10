@@ -506,7 +506,8 @@ class Oof {
         final padding = childStyle.padding.resolveOrZero(OptionalFloat.some(areaWidth));
         final border = childStyle.border.resolveOrZero(OptionalFloat.some(areaWidth));
         final paddingBorderSum = padding.add(border).sumAxes();
-        final boxSizingAdjustment = childStyle.boxSizing == ContentBox ? paddingBorderSum : Size.ZERO;
+        final contentBoxAdjusted = childStyle.boxSizing == ContentBox;
+        final boxSizingAdjustment = new Size(contentBoxAdjusted ? paddingBorderSum.width : 0.0, contentBoxAdjusted ? paddingBorderSum.height : 0.0);
 
         // Resolve inset
         final inset = childStyle.inset;

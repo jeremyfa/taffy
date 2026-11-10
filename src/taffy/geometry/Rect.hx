@@ -36,6 +36,8 @@ class Rect {
 
     /** Sets the four values (only for the rects owned by `AlgoConstants`) */
     @:allow(taffy.compute.flexbox.AlgoConstants)
+    @:allow(taffy.compute.flexbox.FlexItem)
+    @:allow(taffy.compute.block.BlockItem)
     @:allow(taffy.compute.common.ScrollableOverflow)
     inline function set(left:Float, right:Float, top:Float, bottom:Float):Void {
         this.left = left;

@@ -70,10 +70,32 @@ private class FinalPassState {
     /** The main offset of the current item */
     public var totalOffsetMain:Float = 0.0;
 
-    /** The accumulated scrollable overflow rect */
-    public var overflowRect:Rect = Rect.ZERO;
+    /** The accumulated scrollable overflow rect, as four values (`Rect.ZERO` at first, a union per item) */
+    public var overflowLeft:Float = 0.0;
+    public var overflowRight:Float = 0.0;
+    public var overflowTop:Float = 0.0;
+    public var overflowBottom:Float = 0.0;
 
     public inline function new() {}
+
+    /** The state of a new pass (states are reused, one per nesting level of final passes) */
+    public inline function reset():FinalPassState {
+        totalOffsetCross = 0.0;
+        totalOffsetMain = 0.0;
+        overflowLeft = 0.0;
+        overflowRight = 0.0;
+        overflowTop = 0.0;
+        overflowBottom = 0.0;
+        return this;
+    }
+
+    /** `overflowRect = overflowRect.union(other)` without a new rect */
+    public inline function unionOverflow(other:Rect):Void {
+        overflowLeft = Sys.f32Min(overflowLeft, other.left);
+        overflowRight = Sys.f32Max(overflowRight, other.right);
+        overflowTop = Sys.f32Min(overflowTop, other.top);
+        overflowBottom = Sys.f32Max(overflowBottom, other.bottom);
+    }
 
 }
 
@@ -173,13 +195,15 @@ class FlexboxLayout {
 
         // The size of the container should be floored by the padding and border
         final styledKnown = knownDimensions.or(minMaxDefiniteSize.or(clampedStyleSize).maybeMaxSize(paddingBorderSum));
-        final styledBasedKnownDimensions = SizeOpt.shared(styledKnown.width, styledKnown.height);
+        // The styled known dimensions as values: the child input owns their size (`acquireKnownParts`)
+        final styledKnownWidth = styledKnown.width;
+        final styledKnownHeight = styledKnown.height;
 
         // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
         // is ComputeSize (and thus the container's size is all that we're interested in)
         if (runMode == RunMode.ComputeSize) {
-            final w = styledBasedKnownDimensions.width;
-            final h = styledBasedKnownDimensions.height;
+            final w = styledKnownWidth;
+            final h = styledKnownHeight;
             if (w.isSome() && h.isSome()) {
                 return LayoutOutput.fromOuterSize(new Size(w.unwrap(), h.unwrap()));
             }
@@ -199,11 +223,12 @@ class FlexboxLayout {
             inputs.knownDimensionsAreDefinite.height || knownDimensions.height.isNone()
         );
 
-        final output = computePreliminary(tree, node, LayoutInput.acquire(
+        final output = computePreliminary(tree, node, LayoutInput.acquireKnownParts(
             inputs.runMode,
             inputs.sizingMode,
             inputs.axis,
-            styledBasedKnownDimensions,
+            styledKnownWidth,
+            styledKnownHeight,
             knownDimensionsAreDefinite,
             inputs.parentSize,
             inputs.availableSpace,
@@ -652,10 +677,10 @@ class FlexboxLayout {
                 pooled.ownedSize(2, maxSize.width, maxSize.height),
                 aspectRatio,
                 relativeInset,
-                Rect.shared(margin.left, margin.right, margin.top, margin.bottom),
+                pooled.ownedRect(0, margin.left, margin.right, margin.top, margin.bottom),
                 (leftAuto || rightAuto || topAuto || bottomAuto) ? new RectOf<Bool>(leftAuto, rightAuto, topAuto, bottomAuto) : NO_AUTO_MARGINS,
-                Rect.shared(p.left, p.right, p.top, p.bottom),
-                Rect.shared(b.left, b.right, b.top, b.bottom),
+                pooled.ownedRect(1, p.left, p.right, p.top, p.bottom),
+                pooled.ownedRect(2, b.left, b.right, b.top, b.bottom),
                 resolveNormalAlignment(childStyle.alignSelf != null ? (childStyle.alignSelf : AlignItems) : constants.alignItems)
                     .resolveSelfRelative(childStyle.direction, constants.layoutDirection, constants.isColumn),
                 childStyle.overflow,
@@ -2009,7 +2034,8 @@ class FlexboxLayout {
                     final padding = childStyle.padding.resolveOrZero(constants.nodeInnerSize.width);
                     final border = childStyle.border.resolveOrZero(constants.nodeInnerSize.width);
                     final pbSum = padding.add(border).sumAxes();
-                    final boxSizingAdjustment = childStyle.boxSizing == BoxSizing.ContentBox ? pbSum : Size.ZERO;
+                    final contentBoxAdjusted = childStyle.boxSizing == BoxSizing.ContentBox;
+                    final boxSizingAdjustment = new Size(contentBoxAdjusted ? pbSum.width : 0.0, contentBoxAdjusted ? pbSum.height : 0.0);
 
                     final maxSizeIgnoringAspectRatio = childStyle.maxSize.maybeResolve(constants.nodeInnerSize).maybeAddSize(boxSizingAdjustment);
 
@@ -2374,9 +2400,10 @@ class FlexboxLayout {
             size,
             scrollableOverflowRect,
             scrollbarSize,
-            item.border,
-            item.padding,
-            item.margin
+            // The item's rects are its own (reused): the layout keeps copies
+            item.layoutRect(item.border),
+            item.layoutRect(item.padding),
+            item.layoutRect(item.margin)
         ));
 
         // Keep out-of-flow candidates from the item's subtree, translating anchors from
@@ -2395,7 +2422,7 @@ class FlexboxLayout {
 
         final isRtlLocation = layoutDirection.isRtl();
         final contributionLocation = new Point(isRtlLocation ? containerSize.width - (location.x + size.width) - border.right : location.x - border.left, location.y - border.top);
-        state.overflowRect = state.overflowRect.union(ScrollableOverflow.computeScrollableOverflowContribution(
+        state.unionOverflow(ScrollableOverflow.computeScrollableOverflowContribution(
             contributionLocation,
             size,
             scrollableOverflowRect,
@@ -2450,8 +2477,17 @@ class FlexboxLayout {
     }
 
     /** Do a final layout pass and collect the resulting layouts. */
+    /** The states of the final passes running, one per nesting level (an item's layout runs its own pass) */
+    static final finalPassStates:Array<FinalPassState> = [];
+
+    static var finalPassDepth:Int = 0;
+
     static function finalLayoutPass(tree:LayoutFlexboxContainer, flexLines:Array<FlexLine>, constants:AlgoConstants):Rect {
-        final state = new FinalPassState();
+        final depth = finalPassDepth;
+        if (depth == finalPassStates.length)
+            finalPassStates.push(new FinalPassState());
+        final state = finalPassStates[depth].reset();
+        finalPassDepth = depth + 1;
         state.totalOffsetCross = if (constants.isColumn && constants.layoutDirection.isRtl()) {
             constants.containerSize.width - constants.contentBoxInset.crossEnd(constants.dir);
         }
@@ -2472,7 +2508,9 @@ class FlexboxLayout {
             }
         }
 
-        var overflowRect = state.overflowRect;
+        // The union of the contributions (`Rect.ZERO` when it is all +0, like the rect it starts from)
+        var overflowRect = Rect.shared(state.overflowLeft, state.overflowRight, state.overflowTop, state.overflowBottom);
+        finalPassDepth = depth;
 
         // A scroll container's own padding at the end of the content is part of its scrollable
         // overflow region, so it is included in the overflow rect. Boxes that are not scroll

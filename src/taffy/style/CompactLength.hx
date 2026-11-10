@@ -79,7 +79,26 @@ final class CompactLength {
 
     /** An absolute length in some abstract units */
     public static inline function length(val:Float):CompactLength {
-        return val == 0.0 ? ZERO : new CompactLength(LENGTH_TAG, val);
+        return val == 0.0 ? ZERO : ((val >= 1.0 && val < SHARED_LENGTHS && val == Math.ffloor(val)) ? sharedLength(Std.int(val)) : new CompactLength(LENGTH_TAG, val));
+    }
+
+    /** Whole lengths below this are shared (`sharedLength`): styles in pixels are mostly whole numbers */
+    static inline final SHARED_LENGTHS:Int = 4096;
+
+    /** The shared whole lengths, made on first use (lengths are immutable) */
+    static final sharedLengths:Array<CompactLength> = [];
+
+    /** The shared length of the whole number `value` (1 to `SHARED_LENGTHS - 1`) */
+    static function sharedLength(value:Int):CompactLength {
+        final lengths = sharedLengths;
+        if (value >= lengths.length)
+            lengths.resize(value + 1);
+        var length = lengths[value];
+        if (length == null) {
+            length = new CompactLength(LENGTH_TAG, value);
+            lengths[value] = length;
+        }
+        return length;
     }
 
     /** A percentage length relative to the size of the containing block (0.5 is 50%) */

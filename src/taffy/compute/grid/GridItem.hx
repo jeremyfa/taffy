@@ -350,7 +350,8 @@ class GridItem {
         final padding = this.padding.resolveOrZero(gridAreaSize.width);
         final border = this.border.resolveOrZero(gridAreaSize.width);
         final paddingBorderSize = padding.add(border).sumAxes();
-        final boxSizingAdjustment = boxSizing == ContentBox ? paddingBorderSize : Size.ZERO;
+        final contentBoxAdjusted = boxSizing == ContentBox;
+        final boxSizingAdjustment = new Size(contentBoxAdjusted ? paddingBorderSize.width : 0.0, contentBoxAdjusted ? paddingBorderSize.height : 0.0);
         final inherentSize = size.maybeResolve(gridAreaSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment);
         final minSize = this.minSize.maybeResolve(gridAreaSize)
             .maybeApplyAspectRatio(aspectRatio)
@@ -649,7 +650,8 @@ class GridItem {
         final padding = this.padding.resolveOrZero(gridAreaSize.width);
         final border = this.border.resolveOrZero(gridAreaSize.width);
         final paddingBorderSize = padding.add(border).sumAxes();
-        final boxSizingAdjustment = boxSizing == ContentBox ? paddingBorderSize : Size.ZERO;
+        final contentBoxAdjusted = boxSizing == ContentBox;
+        final boxSizingAdjustment = new Size(contentBoxAdjusted ? paddingBorderSize.width : 0.0, contentBoxAdjusted ? paddingBorderSize.height : 0.0);
 
         final preferred = size.maybeResolve(gridAreaSize).maybeApplyAspectRatio(aspectRatio).maybeAddSize(boxSizingAdjustment).get(axis);
         if (preferred.isSome()) {

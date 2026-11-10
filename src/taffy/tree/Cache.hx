@@ -10,13 +10,15 @@ import taffy.style.AvailableSpace;
 import taffy.style.AvailableSpace.Definite;
 
 /**
- * The cache key of a layout input.
+ * The cache key of a layout input. Internal (`Cache` extends it: the cache is the key of its final
+ * layout entry, and `NodeData` extends `Cache`: nothing is allocated per node for its cache).
  *
  * Rust packs the f32 bits of the values into integers. This port compares the float values
  * directly (with an extra flag telling known dimensions apart from available space), which
  * is equivalent except for NaN values and is much faster on targets without cheap float to bits conversion.
  */
-private class CacheKey {
+@:noCompletion
+class CacheKey {
 
     /** The known dimension (or encoded available space) in the horizontal axis */
     public var kdAvWidth:Float = 0.0;
@@ -134,6 +136,9 @@ private class MeasureEntry extends CacheKey {
     /** The output returned by cache hits, built from `content` on the first hit and shared by the next ones */
     public var output:Null<LayoutOutput> = null;
 
+    /** The next entry (entries are a chain of at most `CACHE_SIZE`, made on first use: no array per cache) */
+    public var next:Null<MeasureEntry> = null;
+
     public function new() {
         super();
     }
@@ -141,9 +146,12 @@ private class MeasureEntry extends CacheKey {
 }
 
 /**
- * Cached intermediate layout results of a node
+ * Cached intermediate layout results of a node.
+ *
+ * The cache is the key of its final layout entry (no key object per cache), and the measure
+ * entries are a chain made on first use (no array per cache).
  */
-class Cache {
+class Cache extends CacheKey {
 
     /** The number of cache entries for each node in the tree */
     static inline final CACHE_SIZE:Int = 9;
@@ -166,14 +174,18 @@ class Cache {
     /** A key reused for lookups to avoid allocations */
     static final scratchKey:CacheKey = new CacheKey();
 
-    /** The key of the final layout entry */
-    final finalLayoutKey:CacheKey = new CacheKey();
+    /** The key of the final layout entry (the cache itself) */
+    var finalLayoutKey(get, never):CacheKey;
+
+    inline function get_finalLayoutKey():CacheKey {
+        return this;
+    }
 
     /** The cache entry for the node's final layout */
     var finalLayoutEntry:Null<LayoutOutput> = null;
 
-    /** The cache entries for the node's preliminary size measurements (lazily allocated) */
-    var measureEntries:Null<Array<MeasureEntry>> = null;
+    /** The cache entries for the node's preliminary size measurements: entry `i` is the `i`th of the chain (made on first use) */
+    var firstMeasureEntry:Null<MeasureEntry> = null;
 
     /** Which measure entries hold a value */
     var usedEntries:Int = 0;
@@ -190,7 +202,27 @@ class Cache {
     /** The `sizingMode` and `verticalMarginsAreCollapsible` inputs that all of the cache's entries were computed with */
     var mode:Int = 0;
 
-    public function new() {}
+    public function new() {
+        super();
+    }
+
+    /** The measure entry at `index`, made with the entries before it when missing */
+    function measureEntryAt(index:Int):MeasureEntry {
+        var entry = firstMeasureEntry;
+        if (entry == null) {
+            entry = new MeasureEntry();
+            firstMeasureEntry = entry;
+        }
+        for (_ in 0...index) {
+            var next = entry.next;
+            if (next == null) {
+                next = new MeasureEntry();
+                entry.next = next;
+            }
+            entry = next;
+        }
+        return entry;
+    }
 
     static inline function modeOf(input:LayoutInput):Int {
         return (input.sizingMode == InherentSize ? INHERENT_SIZE_BIT : 0)
@@ -217,23 +249,26 @@ class Cache {
                 }
                 return null;
             case ComputeSize:
-                if (measureEntries == null)
-                    return null;
-                for (index in 0...CACHE_SIZE) {
-                    if (usedEntries & (1 << index) == 0)
+                var entry = firstMeasureEntry;
+                var index = 0;
+                while (entry != null) {
+                    final current = entry;
+                    final currentIndex = index;
+                    entry = entry.next;
+                    index++;
+                    if (usedEntries & (1 << currentIndex) == 0)
                         continue;
-                    final entry = measureEntries[index];
-                    final ek = entry.key;
+                    final ek = current.key;
                     if (ek.kdAvEquals(key)
                         && ek.definite == key.definite
                         && ek.parentWidth == key.parentWidth
                         && ek.sizeIsValidFor(key)) {
-                        recentlyUsedEntries |= 1 << index;
+                        recentlyUsedEntries |= 1 << currentIndex;
                         // Shared between hits, like the final layout entry above
-                        var output = entry.output;
+                        var output = current.output;
                         if (output == null) {
-                            output = LayoutOutput.fromOuterSize(entry.content);
-                            entry.output = output;
+                            output = LayoutOutput.fromOuterSize(current.content);
+                            current.output = output;
                         }
                         return output;
                     }
@@ -280,11 +315,14 @@ class Cache {
                 final key = scratchKey;
                 key.setFrom(input);
                 // Entries are created on first use (most nodes use one or two)
-                if (measureEntries == null)
-                    measureEntries = [for (_ in 0...CACHE_SIZE) null];
-                for (index in 0...CACHE_SIZE) {
-                    if (usedEntries & (1 << index) != 0 && measureEntries[index].key.equals(key)) {
-                        final entry = measureEntries[index];
+                var existing = firstMeasureEntry;
+                var existingIndex = 0;
+                while (existing != null) {
+                    final index = existingIndex;
+                    final entry = existing;
+                    existing = existing.next;
+                    existingIndex++;
+                    if (usedEntries & (1 << index) != 0 && entry.key.equals(key)) {
                         if (entry.content != layoutOutput.size) {
                             entry.content = layoutOutput.size;
                             entry.output = null;
@@ -300,11 +338,7 @@ class Cache {
                         nextMeasureEntry = 0;
                 }
                 final entryIndex = nextMeasureEntry;
-                var entry = measureEntries[entryIndex];
-                if (entry == null) {
-                    entry = new MeasureEntry();
-                    measureEntries[entryIndex] = entry;
-                }
+                final entry = measureEntryAt(entryIndex);
                 entry.key.copyFrom(key);
                 entry.content = layoutOutput.size;
                 entry.output = null;

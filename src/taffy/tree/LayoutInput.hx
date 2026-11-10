@@ -178,6 +178,46 @@ class LayoutInput {
         return input.reset(runMode, sizingMode, axis, known, knownDimensionsAreDefinite, parent, available, verticalMarginsAreCollapsible);
     }
 
+    /**
+     * `acquire` with the known dimensions given as values, written into a size owned by the pooled
+     * input (the other sizes are kept as given).
+     */
+    @:noCompletion
+    public static inline function acquireKnownParts(
+        runMode:RunMode,
+        sizingMode:SizingMode,
+        axis:RequestedAxis,
+        knownWidth:OptionalFloat,
+        knownHeight:OptionalFloat,
+        knownDimensionsAreDefinite:SizeOf<Bool>,
+        parentSize:SizeOpt,
+        availableSpace:SizeAvail,
+        verticalMarginsAreCollapsible:LineOf<Bool>
+    ):LayoutInput {
+        final depth = poolDepth;
+        poolDepth = depth + 1;
+        var input:LayoutInput;
+        if (depth < pool.length) {
+            input = pool[depth];
+        }
+        else {
+            input = new LayoutInput(runMode, sizingMode, axis, SizeOpt.NONE, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
+            pool.push(input);
+        }
+        var known = SizeOpt.NONE;
+        if (knownWidth.isSome() || knownHeight.isSome()) {
+            known = input.ownKnown;
+            if (known == null) {
+                known = new SizeOpt(knownWidth, knownHeight);
+                input.ownKnown = known;
+            }
+            else {
+                known.set(knownWidth, knownHeight);
+            }
+        }
+        return input.reset(runMode, sizingMode, axis, known, knownDimensionsAreDefinite, parentSize, availableSpace, verticalMarginsAreCollapsible);
+    }
+
     /** The sizes owned by a pooled input (`acquireParts`), changed in place when it is reused */
     var ownKnown:Null<SizeOpt> = null;
     var ownParent:Null<SizeOpt> = null;

@@ -74,6 +74,37 @@ class BlockItem {
         return own;
     }
 
+    /** Rects owned by this pooled item (padding, border) and its padding and border sum, set again each time it is reused */
+    final ownPadding:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownBorder:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownPaddingBorderSum:Size = new Size(0.0, 0.0);
+
+    /**
+     * `Rect.shared(left, right, top, bottom)` without allocating (`kind` 0: padding, 1: border): the
+     * shared `ZERO` when all four are +0, otherwise this item's own rect set to them. Copied by
+     * `layoutRect()` where it escapes (the child's `Layout`).
+     */
+    public inline function ownedRect(kind:Int, left:Float, right:Float, top:Float, bottom:Float):Rect {
+        if (Size.isPositiveZero(left) && Size.isPositiveZero(right) && Size.isPositiveZero(top) && Size.isPositiveZero(bottom))
+            return Rect.ZERO;
+        final own = kind == 0 ? ownPadding : ownBorder;
+        own.set(left, right, top, bottom);
+        return own;
+    }
+
+    /** `rect` (the padding or border of this item) as a value to keep: a copy of the item's own rects */
+    public inline function layoutRect(rect:Rect):Rect {
+        return (rect == ownPadding || rect == ownBorder) ? new Rect(rect.left, rect.right, rect.top, rect.bottom) : rect;
+    }
+
+    /** `Size.shared(width, height)` without allocating: the shared `ZERO` when both are +0, otherwise this item's own sum */
+    public inline function ownedPaddingBorderSum(width:Float, height:Float):Size {
+        if (Size.isPositiveZero(width) && Size.isPositiveZero(height))
+            return Size.ZERO;
+        ownPaddingBorderSum.set(width, height);
+        return ownPaddingBorderSum;
+    }
+
     /** The minimum allowable size of this item */
     public var minSize:SizeOpt;
 

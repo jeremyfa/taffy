@@ -155,7 +155,8 @@ class GridAlignment {
         final border = style.border.resolveOrZero(OptionalFloat.some(containingBlockSize.width));
         final paddingBorderSize = padding.add(border).sumAxes();
 
-        final boxSizingAdjustment = style.boxSizing == ContentBox ? paddingBorderSize : Size.ZERO;
+        final contentBoxAdjusted = style.boxSizing == ContentBox;
+        final boxSizingAdjustment = new Size(contentBoxAdjusted ? paddingBorderSize.width : 0.0, contentBoxAdjusted ? paddingBorderSize.height : 0.0);
 
         final containingBlockOptions = containingBlockSize.toOptions();
         final sizeStyle = style.size;

@@ -168,6 +168,29 @@ class FlexItem {
         return own;
     }
 
+    /** Rects owned by this pooled item (margin, padding, border), set again each time it is reused */
+    final ownMargin:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownPadding:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+    final ownBorder:Rect = new Rect(0.0, 0.0, 0.0, 0.0);
+
+    /**
+     * `Rect.shared(left, right, top, bottom)` without allocating: the shared `ZERO` when all four
+     * are +0, otherwise the item's own rect of `kind` (0: margin, 1: padding, 2: border) set to the
+     * values. Copied by `layoutRect()` where it escapes (the child's `Layout`).
+     */
+    public inline function ownedRect(kind:Int, left:Float, right:Float, top:Float, bottom:Float):Rect {
+        if (Size.isPositiveZero(left) && Size.isPositiveZero(right) && Size.isPositiveZero(top) && Size.isPositiveZero(bottom))
+            return Rect.ZERO;
+        final own = kind == 0 ? ownMargin : (kind == 1 ? ownPadding : ownBorder);
+        own.set(left, right, top, bottom);
+        return own;
+    }
+
+    /** `rect` (a margin, padding or border of this item) as a value to keep: a copy of the item's own rects */
+    public inline function layoutRect(rect:Rect):Rect {
+        return (rect == ownMargin || rect == ownPadding || rect == ownBorder) ? new Rect(rect.left, rect.right, rect.top, rect.bottom) : rect;
+    }
+
     /** The item's own size for `reset` (`kind` 0: size, 1: min size, 2: max size) */
     public inline function ownedSize(kind:Int, width:OptionalFloat, height:OptionalFloat):SizeOpt {
         return ownedOrNone(kind == 0 ? ownSize : (kind == 1 ? ownMinSize : ownMaxSize), width, height);

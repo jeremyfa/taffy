@@ -30,6 +30,7 @@ class Size {
 
     /** Sets both values (only for the sizes owned by `AlgoConstants`) */
     @:allow(taffy.compute.flexbox.AlgoConstants)
+    @:allow(taffy.compute.block.BlockItem)
     inline function set(width:Float, height:Float):Void {
         this.width = width;
         this.height = height;

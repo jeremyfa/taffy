@@ -22,6 +22,7 @@ class HandWrittenTests {
             {name: "border_and_padding", tests: hand_written.BorderAndPaddingTests.tests()},
             {name: "caching", tests: hand_written.CachingTests.tests()},
             {name: "compressible_replaced", tests: hand_written.CompressibleReplacedTests.tests()},
+            {name: "cutoff", tests: hand_written.CutoffTests.tests()},
             {name: "detailed_grid_info", tests: hand_written.DetailedGridInfoTests.tests()},
             {name: "flex_line_count", tests: hand_written.FlexLineCountTests.tests()},
             {name: "floats", tests: hand_written.FloatsTests.tests()},

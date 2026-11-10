@@ -215,6 +215,21 @@ class XmlTests {
      */
     public static var relayoutCheck:Bool = false;
 
+    /**
+     * When set (`--cutoff-check` of the runner), each node of every fixture is replaced in turn by
+     * a copy of its subtree, checked with `TaffyTree.matchesRelayout` against the cache of the node
+     * it replaces, given the replaced node's layout when it matches (its parent is marked dirty
+     * otherwise), and the tree is laid out again from its caches: the layout must be exactly the
+     * first one. Checks
+     * the early cutoff of incremental layout (Glaze's `TaffyLayoutEngine`).
+     */
+    public static var cutoffCheck:Bool = false;
+
+    /** Nodes checked and skipped (lossy cache or out of flow) by `cutoffCheck` */
+    public static var cutoffChecked:Int = 0;
+    public static var cutoffSkipped:Int = 0;
+    public static var cutoffNotMatched:Int = 0;
+
     /** When set (`--dump <file>` of the runner), receives the computed layout of every fixture */
     public static var dump:Null<StringBuf> = null;
 
@@ -270,6 +285,11 @@ class XmlTests {
             if (measurer.toString() != first.toString())
                 return new FixtureResult(false, "RELAYOUT WITH A MEASURER DIFFERS\n" + first.toString() + "MEASURER\n" + measurer.toString());
         }
+        if (cutoffCheck) {
+            final error = runCutoffCheck(tree, rootNodeId, availableSpace);
+            if (error != null)
+                return new FixtureResult(false, error);
+        }
         if (expected.matches(actual))
             return new FixtureResult(true, "");
         final buf = new StringBuf();
@@ -278,6 +298,74 @@ class XmlTests {
         buf.add("ACTUAL\n");
         actual.writeTree(buf, "  ");
         return new FixtureResult(false, buf.toString());
+    }
+
+    /** The layout dump of the tree without its node ids (copies have other ids) */
+    static function dumpWithoutIds(tree:TaffyTree<TestNodeContext>, root:NodeId):String {
+        final buf = new StringBuf();
+        getComputedExpectations(tree, root).writeTree(buf, "  ");
+        return ~/\[node [0-9]+\]/g.replace(buf.toString(), "[node]");
+    }
+
+    static function preOrder(tree:TaffyTree<TestNodeContext>, node:NodeId, into:Array<NodeId>):Array<NodeId> {
+        into.push(node);
+        for (child in tree.children(node))
+            preOrder(tree, child, into);
+        return into;
+    }
+
+    /** A copy of the subtree of `node` (same styles and contexts, new nodes) */
+    static function copySubtree(tree:TaffyTree<TestNodeContext>, node:NodeId):NodeId {
+        final children = [for (child in tree.children(node)) copySubtree(tree, child)];
+        final copy = tree.newWithChildren(tree.style(node), children);
+        final context = tree.getNodeContext(node);
+        if (context != null)
+            tree.setNodeContext(copy, context);
+        return copy;
+    }
+
+    static function runCutoffCheck(tree:TaffyTree<TestNodeContext>, root:NodeId, availableSpace:SizeAvail):Null<String> {
+        final measurer = new TestMeasurer();
+        // Laid out once more with the measurer, so that every cache is the one a relayout keeps
+        tree.computeLayoutWithMeasurer(root, availableSpace, measurer);
+        final first = dumpWithoutIds(tree, root);
+        var index = 1;
+        while (true) {
+            final nodes = preOrder(tree, root, []);
+            if (index >= nodes.length)
+                break;
+            final node = nodes[index];
+            index++;
+            final data = @:privateAccess tree.nodes[node];
+            if (data.lossy || !data.hasFinalLayout() || data.style.position.isOutOfFlow()) {
+                cutoffSkipped++;
+                continue;
+            }
+            cutoffChecked++;
+            // Swap the copy in, without marking anything dirty (as Glaze's engine does)
+            final copy = copySubtree(tree, node);
+            final copyData = @:privateAccess tree.nodes[copy];
+            final parent = data.parent;
+            final siblings = @:privateAccess tree.nodes[parent].children;
+            siblings[siblings.indexOf(node)] = copy;
+            copyData.parent = parent;
+            data.parent = -1;
+            if (tree.matchesRelayout(copy, data.cache, measurer)) {
+                copyData.unroundedLayout = data.unroundedLayout;
+            }
+            else {
+                // Not matched (out-of-flow candidates in the output, margins collapsing through):
+                // the parent is laid out again, as the engine does
+                cutoffNotMatched++;
+                tree.markDirty(parent);
+            }
+            tree.computeLayoutWithMeasurer(root, availableSpace, measurer);
+            final again = dumpWithoutIds(tree, root);
+            if (again != first)
+                return 'CUTOFF: LAYOUT AFTER REPLACING NODE ' + (node : Int) + ' DIFFERS\n' + first + 'AFTER\n' + again;
+            // Nodes in the copy are visited too (their caches were filled by `matchesRelayout`)
+        }
+        return null;
     }
 
     static function markAllDirty(tree:TaffyTree<TestNodeContext>, node:NodeId):Void {

@@ -39,6 +39,8 @@ class Main {
                     XmlTests.dump = new StringBuf();
                 case "--relayout-check":
                     XmlTests.relayoutCheck = true;
+                case "--cutoff-check":
+                    XmlTests.cutoffCheck = true;
                 case _:
                     fixturesDir = arg;
             }
@@ -119,6 +121,8 @@ class Main {
                 FileIO.println('$cat: $passed / $count passed');
         }
         FileIO.println('total: $totalPassed / $totalCount passed');
+        if (XmlTests.cutoffCheck)
+            FileIO.println('cutoff check: ${XmlTests.cutoffChecked} nodes replaced and checked (${XmlTests.cutoffNotMatched} not matched, laid out again), ${XmlTests.cutoffSkipped} skipped (lossy cache or out of flow)');
         if (dumpFile != null)
             FileIO.writeFile(dumpFile, XmlTests.dump.toString());
         if (failuresFile != null)

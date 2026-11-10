@@ -233,6 +233,86 @@ class Style {
         return s;
     }
 
+    /**
+     * Whether `other` lays out exactly like this style: every field is the same value (lengths by
+     * tag and value, geometry by component). Grid lists, grid template areas and line names
+     * compare by reference (empty lists are equal): different lists are reported as different
+     * even when their contents are the same. Not in Rust taffy (which compares with `PartialEq`).
+     */
+    public function layoutEquals(other:Style):Bool {
+        if (this == other)
+            return true;
+        return display == other.display
+            && itemIsTable == other.itemIsTable
+            && itemIsReplaced == other.itemIsReplaced
+            && itemIsCompressibleReplaced == other.itemIsCompressibleReplaced
+            && boxSizing == other.boxSizing
+            && direction == other.direction
+            && (overflow == other.overflow || (overflow.x == other.overflow.x && overflow.y == other.overflow.y))
+            && sameFloat(scrollbarWidth, other.scrollbarWidth)
+            && contain == other.contain
+            && float == other.float
+            && clear == other.clear
+            && position == other.position
+            && (inset == other.inset || (sameLpa(inset.left, other.inset.left) && sameLpa(inset.right, other.inset.right) && sameLpa(inset.top, other.inset.top) && sameLpa(inset.bottom, other.inset.bottom)))
+            && (size == other.size || (sameLength(size.width.intoRaw(), other.size.width.intoRaw()) && sameLength(size.height.intoRaw(), other.size.height.intoRaw())))
+            && (minSize == other.minSize || (sameLpa(minSize.width, other.minSize.width) && sameLpa(minSize.height, other.minSize.height)))
+            && (maxSize == other.maxSize || (sameLpa(maxSize.width, other.maxSize.width) && sameLpa(maxSize.height, other.maxSize.height)))
+            && (aspectRatio.isNone() ? other.aspectRatio.isNone() : (other.aspectRatio.isSome() && sameFloat(aspectRatio.unwrap(), other.aspectRatio.unwrap())))
+            && (margin == other.margin || (sameLpa(margin.left, other.margin.left) && sameLpa(margin.right, other.margin.right) && sameLpa(margin.top, other.margin.top) && sameLpa(margin.bottom, other.margin.bottom)))
+            && (padding == other.padding || (sameLp(padding.left, other.padding.left) && sameLp(padding.right, other.padding.right) && sameLp(padding.top, other.padding.top) && sameLp(padding.bottom, other.padding.bottom)))
+            && (border == other.border || (sameLp(border.left, other.border.left) && sameLp(border.right, other.border.right) && sameLp(border.top, other.border.top) && sameLp(border.bottom, other.border.bottom)))
+            && alignItems == other.alignItems
+            && sameOptionalAlign(alignSelf, other.alignSelf)
+            && justifyItems == other.justifyItems
+            && sameOptionalAlign(justifySelf, other.justifySelf)
+            && alignContent == other.alignContent
+            && justifyContent == other.justifyContent
+            && (gap == other.gap || (sameLp(gap.width, other.gap.width) && sameLp(gap.height, other.gap.height)))
+            && textAlign == other.textAlign
+            && flexDirection == other.flexDirection
+            && flexWrap == other.flexWrap
+            && flexLineCount == other.flexLineCount
+            && sameLength(flexBasis.intoRaw(), other.flexBasis.intoRaw())
+            && sameFloat(flexGrow, other.flexGrow)
+            && sameFloat(flexShrink, other.flexShrink)
+            && sameList(gridTemplateRows, other.gridTemplateRows)
+            && sameList(gridTemplateColumns, other.gridTemplateColumns)
+            && sameList(gridAutoRows, other.gridAutoRows)
+            && sameList(gridAutoColumns, other.gridAutoColumns)
+            && gridAutoFlow == other.gridAutoFlow
+            && gridTemplateAreas == other.gridTemplateAreas
+            && sameList(gridTemplateColumnNames, other.gridTemplateColumnNames)
+            && sameList(gridTemplateRowNames, other.gridTemplateRowNames)
+            && (gridRow == other.gridRow || (Type.enumEq(gridRow.start, other.gridRow.start) && Type.enumEq(gridRow.end, other.gridRow.end)))
+            && (gridColumn == other.gridColumn || (Type.enumEq(gridColumn.start, other.gridColumn.start) && Type.enumEq(gridColumn.end, other.gridColumn.end)));
+    }
+
+    /** The same value, zero signs included */
+    static inline function sameFloat(a:Float, b:Float):Bool {
+        return a == b ? (a != 0.0 || 1.0 / a == 1.0 / b) : (a != a && b != b);
+    }
+
+    static inline function sameLength(a:CompactLength, b:CompactLength):Bool {
+        return a == b || (a.tag == b.tag && sameFloat(a.value, b.value));
+    }
+
+    static inline function sameLpa(a:LengthPercentageAuto, b:LengthPercentageAuto):Bool {
+        return sameLength(a.intoRaw(), b.intoRaw());
+    }
+
+    static inline function sameLp(a:LengthPercentage, b:LengthPercentage):Bool {
+        return sameLength(a.intoRaw(), b.intoRaw());
+    }
+
+    static inline function sameOptionalAlign(a:Null<AlignItems>, b:Null<AlignItems>):Bool {
+        return a == null ? b == null : (b != null && (a : AlignItems) == (b : AlignItems));
+    }
+
+    static inline function sameList<T>(a:Array<T>, b:Array<T>):Bool {
+        return a == b || (a.length == 0 && b.length == 0);
+    }
+
     // CoreStyle
 
     /** The box generation mode of the node (`None` for `display: none`) */

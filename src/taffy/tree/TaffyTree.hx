@@ -143,6 +143,13 @@ class TaffyTree<NodeContext> {
     /** Whether layouts are rounded to whole pixels */
     var useRounding:Bool = true;
 
+    /**
+     * Whether the cache entries record the inputs they were computed for, which
+     * `matchesRelayout()` needs (a little more work per stored result). Not in Rust taffy.
+     */
+    @:noCompletion
+    public var recordInputs:Bool = true;
+
     /** The view used to run layout (reused between runs) */
     var view:Null<TaffyView<NodeContext>> = null;
 
@@ -473,7 +480,10 @@ class TaffyTree<NodeContext> {
             view = taffyView;
         }
         taffyView.measureFunction = measureFunction;
+        final previousRecordInputs = Cache.recordInputs;
+        Cache.recordInputs = recordInputs;
         Compute.computeRootLayout(taffyView, nodeId, availableSpace);
+        Cache.recordInputs = previousRecordInputs;
         if (useRounding) {
             Compute.roundLayout(taffyView, nodeId);
         }
@@ -493,11 +503,53 @@ class TaffyTree<NodeContext> {
             view = taffyView;
         }
         taffyView.measurer = measurer;
+        final previousRecordInputs = Cache.recordInputs;
+        Cache.recordInputs = recordInputs;
         Compute.computeRootLayout(taffyView, nodeId, availableSpace);
+        Cache.recordInputs = previousRecordInputs;
         if (useRounding) {
             Compute.roundLayout(taffyView, nodeId);
         }
         taffyView.measurer = null;
+    }
+
+    /**
+     * Lays `nodeId` out again for every input recorded in `reference` (the cache of the node it
+     * replaces, or a `snapshot()` of its own cache taken before it changed) and returns whether
+     * every result is the same as the recorded one: the sizes of the measure entries, and the
+     * whole output of the final layout entry (laid out last, so the subtree of `nodeId` ends up
+     * with that layout). When it returns true, a parent whose own cached layout was computed with
+     * `reference` would compute the same layout with `nodeId`: the parent's cache stays valid.
+     * Returns false without laying anything out when `nodeId` is out of flow (absolutely
+     * positioned) or a block container with children, or when `reference` is `lossy` or holds no final layout, and false as soon as a
+     * result differs. The results stay in the cache of `nodeId`.
+     * Not in Rust taffy (an early cutoff of the dirty marking for incremental layout).
+     */
+    @:noCompletion
+    public function matchesRelayout(nodeId:NodeId, reference:Cache, measurer:LayoutMeasurer<NodeContext>):Bool {
+        // An out-of-flow box is laid out by its containing block (by id, in its hoisted list):
+        // replacing it would leave that list naming the node it replaces
+        final data = node(nodeId);
+        if (data.style.position.isOutOfFlow() || reference.lossy || !reference.hasFinalLayout())
+            return false;
+        // A block container lays its children out in a block formatting context that it may share
+        // with its parent (margins collapsing through it, floats): laid out on its own, it would
+        // fill its subtree's caches with results that do not hold in that context
+        if (data.children.length > 0 && (data.style.display == Display.Block || data.style.display == Display.FlowRoot))
+            return false;
+        var taffyView = view;
+        if (taffyView == null) {
+            taffyView = new TaffyView<NodeContext>(this);
+            view = taffyView;
+        }
+        final previousMeasurer = taffyView.measurer;
+        taffyView.measurer = measurer;
+        final previousRecordInputs = Cache.recordInputs;
+        Cache.recordInputs = recordInputs;
+        final matches = reference.matchesRelayout(taffyView, nodeId);
+        Cache.recordInputs = previousRecordInputs;
+        taffyView.measurer = previousMeasurer;
+        return matches;
     }
 
     /** Updates the stored layout of the provided `node` and its children (leaves are measured as zero size) */
@@ -593,6 +645,11 @@ class TaffyView<NodeContext>
 
         // We run the following inside the cache lookup (Rust `compute_cached_layout`)
         final nodeData = data(nodeId);
+        if (blockCtx != null) {
+            // In its parent's block formatting context: the result also depends on that context,
+            // which the cache does not record (see `Cache.lossy`)
+            nodeData.markLossy();
+        }
         final cached = nodeData.cache.get(inputs);
         if (cached != null)
             return cached;
@@ -670,7 +727,10 @@ class TaffyView<NodeContext>
 
     @:noDebug
     public function cacheClear(nodeId:NodeId):Void {
-        data(nodeId).cache.clear();
+        final cache = data(nodeId).cache;
+        cache.clear();
+        // Cleared during its parent's layout (hidden layout): what the parent asked is gone
+        cache.markLossy();
     }
 
     // LayoutBlockContainer

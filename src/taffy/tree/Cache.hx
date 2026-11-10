@@ -4,10 +4,12 @@
 
 package taffy.tree;
 
+import taffy.geometry.LineOf;
 import taffy.geometry.Size;
 import taffy.geometry.SizeOf;
 import taffy.style.AvailableSpace;
 import taffy.style.AvailableSpace.Definite;
+import taffy.util.OptionalFloat;
 
 /**
  * The cache key of a layout input. Internal (`Cache` extends it: the cache is the key of its final
@@ -41,7 +43,63 @@ class CacheKey {
     /** Whether each known dimension is definite (bit 0: width, bit 1: height), normalized to true without a known dimension */
     public var definite:Int = 0;
 
+    /*
+     * What the key drops of the input the entry was computed for (the available space where a
+     * known dimension replaces it, the parent size before its sign is dropped): with the key and
+     * the cache's mode, the input itself, which `Cache.matchesRelayout()` lays a node out again
+     * for. Not in Rust taffy.
+     */
+    public var inputAvailableWidth:AvailableSpace = MaxContent;
+    public var inputAvailableHeight:AvailableSpace = MaxContent;
+    public var inputParentWidth:OptionalFloat = OptionalFloat.NONE;
+    public var inputParentHeight:OptionalFloat = OptionalFloat.NONE;
+
     public function new() {}
+
+    /** Records what the key of `input` drops (see `inputAvailableWidth`) */
+    public inline function recordInput(input:LayoutInput):Void {
+        final available = input.availableSpace;
+        inputAvailableWidth = available.width;
+        inputAvailableHeight = available.height;
+        final parent = input.parentSize;
+        inputParentWidth = parent.width;
+        inputParentHeight = parent.height;
+    }
+
+    /** Copies the recorded input of `other` */
+    public inline function copyInputFrom(other:CacheKey):Void {
+        inputAvailableWidth = other.inputAvailableWidth;
+        inputAvailableHeight = other.inputAvailableHeight;
+        inputParentWidth = other.inputParentWidth;
+        inputParentHeight = other.inputParentHeight;
+    }
+
+    static final TRUE_TRUE:SizeOf<Bool> = new SizeOf<Bool>(true, true);
+    static final TRUE_FALSE:SizeOf<Bool> = new SizeOf<Bool>(true, false);
+    static final FALSE_TRUE:SizeOf<Bool> = new SizeOf<Bool>(false, true);
+    static final FALSE_FALSE:SizeOf<Bool> = new SizeOf<Bool>(false, false);
+    static final LINE_TRUE_TRUE:LineOf<Bool> = new LineOf<Bool>(true, true);
+    static final LINE_TRUE_FALSE:LineOf<Bool> = new LineOf<Bool>(true, false);
+    static final LINE_FALSE_TRUE:LineOf<Bool> = new LineOf<Bool>(false, true);
+    static final LINE_FALSE_FALSE:LineOf<Bool> = new LineOf<Bool>(false, false);
+
+    /**
+     * The input of this entry (its key, its recorded part and `mode`, the `Cache.mode` bits) as a
+     * pooled `LayoutInput` (`LayoutInput.release()` after the call it is given to). The definiteness
+     * of an absent known dimension comes back as true, as the key and the algorithms read it.
+     */
+    public inline function acquireInput(runMode:RunMode, mode:Int):LayoutInput {
+        final knownWidth = (kdFlags & 1) != 0 ? OptionalFloat.some(kdAvWidth) : OptionalFloat.NONE;
+        final knownHeight = (kdFlags & 2) != 0 ? OptionalFloat.some(kdAvHeight) : OptionalFloat.NONE;
+        final kdd = (definite & 1) != 0 ? ((definite & 2) != 0 ? TRUE_TRUE : TRUE_FALSE) : ((definite & 2) != 0 ? FALSE_TRUE : FALSE_FALSE);
+        final start = (mode & 2) != 0;
+        final end = (mode & 4) != 0;
+        final collapsible = start ? (end ? LINE_TRUE_TRUE : LINE_TRUE_FALSE) : (end ? LINE_FALSE_TRUE : LINE_FALSE_FALSE);
+        final axis:RequestedAxis = axisBits == 1 ? Horizontal : (axisBits == 2 ? Vertical : Both);
+        final sizingMode:SizingMode = (mode & 1) != 0 ? InherentSize : ContentSize;
+        return LayoutInput.acquireParts(runMode, sizingMode, axis, knownWidth, knownHeight, kdd, inputParentWidth, inputParentHeight,
+            inputAvailableWidth, inputAvailableHeight, collapsible);
+    }
 
     public inline function setFrom(input:LayoutInput):Void {
         final kd = input.knownDimensions;
@@ -78,6 +136,7 @@ class CacheKey {
     }
 
     public inline function copyFrom(other:CacheKey):Void {
+        copyInputFrom(other);
         kdAvWidth = other.kdAvWidth;
         kdAvHeight = other.kdAvHeight;
         kdFlags = other.kdFlags;
@@ -171,6 +230,13 @@ class Cache extends CacheKey {
      */
     public static var modeChangeEvictions:Int = 0;
 
+    /**
+     * Whether stored entries record their input (`recordInput`), set from `TaffyTree.recordInputs`
+     * while a tree lays out. Without it, a stored entry makes the cache `lossy`.
+     */
+    @:noCompletion
+    public static var recordInputs:Bool = true;
+
     /** A key reused for lookups to avoid allocations */
     static final scratchKey:CacheKey = new CacheKey();
 
@@ -202,8 +268,104 @@ class Cache extends CacheKey {
     /** The `sizingMode` and `verticalMarginsAreCollapsible` inputs that all of the cache's entries were computed with */
     var mode:Int = 0;
 
+    /**
+     * Whether a result computed since the cache was last cleared is missing from it (not cached,
+     * evicted, replaced, or computed in a way that is not cached: hidden layout, a block formatting
+     * context shared with the parent). While false, the entries hold every input the node was laid
+     * out for since then, which `matchesRelayout()` relies on. Not in Rust taffy.
+     */
+    public var lossy(default, null):Bool = false;
+
     public function new() {
         super();
+    }
+
+    /** Marks a result missing from the cache (see `lossy`) */
+    public inline function markLossy():Void {
+        lossy = true;
+    }
+
+    /** Whether the cache holds a final layout entry */
+    public inline function hasFinalLayout():Bool {
+        return finalLayoutEntry != null;
+    }
+
+    /** The same value, zero signs included (NaN matches NaN) */
+    static inline function sameFloat(a:Float, b:Float):Bool {
+        return a == b ? (a != 0.0 || 1.0 / a == 1.0 / b) : (a != a && b != b);
+    }
+
+    static inline function sameSize(a:Size, b:Size):Bool {
+        return a == b || (sameFloat(a.width, b.width) && sameFloat(a.height, b.height));
+    }
+
+    static inline function sameOptional(a:OptionalFloat, b:OptionalFloat):Bool {
+        return a.isNone() ? b.isNone() : (b.isSome() && sameFloat(a.unwrap(), b.unwrap()));
+    }
+
+    /** Whether two final layout outputs are the same for a parent (out-of-flow candidates: none on both) */
+    static function sameFinalOutput(a:LayoutOutput, b:LayoutOutput):Bool {
+        if (a == b)
+            return true;
+        if (!a.oofCandidates.isEmpty() || !b.oofCandidates.isEmpty())
+            return false;
+        final ra = a.scrollableOverflowRect;
+        final rb = b.scrollableOverflowRect;
+        return sameSize(a.size, b.size)
+            && (ra == rb || (sameFloat(ra.left, rb.left) && sameFloat(ra.right, rb.right) && sameFloat(ra.top, rb.top) && sameFloat(ra.bottom, rb.bottom)))
+            && (a.baselines == b.baselines || (sameOptional(a.baselines.first, b.baselines.first) && sameOptional(a.baselines.last, b.baselines.last)))
+            && (a.topMargin == b.topMargin || (sameFloat(a.topMargin.positive, b.topMargin.positive) && sameFloat(a.topMargin.negative, b.topMargin.negative)))
+            && (a.bottomMargin == b.bottomMargin || (sameFloat(a.bottomMargin.positive, b.bottomMargin.positive) && sameFloat(a.bottomMargin.negative, b.bottomMargin.negative)))
+            && a.marginsCanCollapseThrough == b.marginsCanCollapseThrough;
+    }
+
+    /** See `TaffyTree.matchesRelayout` (this is the reference) */
+    @:allow(taffy.tree.TaffyTree)
+    function matchesRelayout(tree:LayoutPartialTree, nodeId:NodeId):Bool {
+        var entry = firstMeasureEntry;
+        var index = 0;
+        while (entry != null) {
+            if (usedEntries & (1 << index) != 0) {
+                final output = tree.computeChildLayout(nodeId, entry.acquireInput(ComputeSize, mode));
+                LayoutInput.release();
+                if (!sameSize(output.size, entry.content))
+                    return false;
+            }
+            entry = entry.next;
+            index++;
+        }
+        final reference = finalLayoutEntry;
+        final output = tree.computeChildLayout(nodeId, acquireInput(PerformLayout, mode));
+        LayoutInput.release();
+        return sameFinalOutput(output, reference);
+    }
+
+    /** A copy of this cache (its entries, keys, recorded inputs and state). Not in Rust taffy. */
+    public function snapshot():Cache {
+        final copy = new Cache();
+        copy.copyFrom(this);
+        copy.finalLayoutEntry = finalLayoutEntry;
+        var entry = firstMeasureEntry;
+        var last:Null<MeasureEntry> = null;
+        while (entry != null) {
+            final copied = new MeasureEntry();
+            copied.copyFrom(entry);
+            copied.content = entry.content;
+            copied.output = entry.output;
+            if (last == null)
+                copy.firstMeasureEntry = copied;
+            else
+                last.next = copied;
+            last = copied;
+            entry = entry.next;
+        }
+        copy.usedEntries = usedEntries;
+        copy.recentlyUsedEntries = recentlyUsedEntries;
+        copy.nextMeasureEntry = nextMeasureEntry;
+        copy.empty = empty;
+        copy.mode = mode;
+        copy.lossy = lossy;
+        return copy;
     }
 
     /** The measure entry at `index`, made with the entries before it when missing */
@@ -286,15 +448,28 @@ class Cache extends CacheKey {
             return;
         final m = modeOf(input);
         if (mode != m) {
-            if (!empty)
+            final dropped = !empty;
+            if (dropped)
                 modeChangeEvictions++;
             clear();
             mode = m;
+            if (dropped)
+                lossy = true;
         }
         switch input.runMode {
             case PerformLayout:
+                if (finalLayoutEntry != null && !lossy) {
+                    final key = scratchKey;
+                    key.setFrom(input);
+                    if (!finalLayoutKey.equals(key))
+                        lossy = true;
+                }
                 empty = false;
                 finalLayoutKey.setFrom(input);
+                if (recordInputs)
+                    finalLayoutKey.recordInput(input);
+                else
+                    lossy = true;
                 // See `get`: an output without candidates is never mutated once returned, so it is
                 // kept as is (an empty list is normalized so that `take()` cannot reach its array)
                 if (layoutOutput.oofCandidates.isEmpty()) {
@@ -309,6 +484,7 @@ class Cache extends CacheKey {
                 if (layoutOutput.marginsCanCollapseThrough
                     || !layoutOutput.topMargin.equals(CollapsibleMarginSet.ZERO)
                     || !layoutOutput.bottomMargin.equals(CollapsibleMarginSet.ZERO)) {
+                    lossy = true;
                     return;
                 }
                 empty = false;
@@ -338,8 +514,14 @@ class Cache extends CacheKey {
                         nextMeasureEntry = 0;
                 }
                 final entryIndex = nextMeasureEntry;
+                if (usedEntries & (1 << entryIndex) != 0)
+                    lossy = true;
                 final entry = measureEntryAt(entryIndex);
                 entry.key.copyFrom(key);
+                if (recordInputs)
+                    entry.key.recordInput(input);
+                else
+                    lossy = true;
                 entry.content = layoutOutput.size;
                 entry.output = null;
                 usedEntries |= 1 << entryIndex;
@@ -353,6 +535,7 @@ class Cache extends CacheKey {
 
     /** Clear all cache entries and reports clear operation outcome */
     public function clear():ClearState {
+        lossy = false;
         if (empty)
             return AlreadyEmpty;
         empty = true;

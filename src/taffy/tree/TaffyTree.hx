@@ -523,10 +523,13 @@ class TaffyTree<NodeContext> {
      * Returns false without laying anything out when `nodeId` is out of flow (absolutely
      * positioned) or a block container with children, or when `reference` is `lossy` or holds no final layout, and false as soon as a
      * result differs. The results stay in the cache of `nodeId`.
+     * With `ownFormattingContext` (the caller knows that `nodeId` does not share its parent's block
+     * formatting context: its parent is a flex or grid container), a block container is laid out
+     * too.
      * Not in Rust taffy (an early cutoff of the dirty marking for incremental layout).
      */
     @:noCompletion
-    public function matchesRelayout(nodeId:NodeId, reference:Cache, measurer:LayoutMeasurer<NodeContext>):Bool {
+    public function matchesRelayout(nodeId:NodeId, reference:Cache, measurer:LayoutMeasurer<NodeContext>, ownFormattingContext:Bool = false):Bool {
         // An out-of-flow box is laid out by its containing block (by id, in its hoisted list):
         // replacing it would leave that list naming the node it replaces
         final data = node(nodeId);
@@ -535,7 +538,7 @@ class TaffyTree<NodeContext> {
         // A block container lays its children out in a block formatting context that it may share
         // with its parent (margins collapsing through it, floats): laid out on its own, it would
         // fill its subtree's caches with results that do not hold in that context
-        if (data.children.length > 0 && (data.style.display == Display.Block || data.style.display == Display.FlowRoot))
+        if (!ownFormattingContext && data.children.length > 0 && (data.style.display == Display.Block || data.style.display == Display.FlowRoot))
             return false;
         var taffyView = view;
         if (taffyView == null) {

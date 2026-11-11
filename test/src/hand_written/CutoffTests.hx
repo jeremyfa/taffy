@@ -25,6 +25,8 @@ class CutoffTests {
             new TestCase("inner_change_with_fixed_size_matches", innerChangeWithFixedSizeMatches),
             new TestCase("cleared_reference_does_not_match", clearedReferenceDoesNotMatch),
             new TestCase("block_container_does_not_match", blockContainerDoesNotMatch),
+            new TestCase("block_flex_item_with_own_context_matches", blockFlexItemWithOwnContextMatches),
+            new TestCase("block_flex_item_with_own_context_detects_size_change", blockFlexItemWithOwnContextDetectsSizeChange),
         ];
     }
 
@@ -110,6 +112,50 @@ class CutoffTests {
         final reference = @:privateAccess taffy.nodes[box].cache;
         swap(taffy, box, newBox);
         Assert.isTrue(!taffy.matchesRelayout(newBox, reference, new FunctionMeasurer()));
+    }
+
+    /** A block box sized by its content (`innerWidth` x 10) in a flex row, laid out at 200 x 100 */
+    static function blockItem(taffy:TaffyTree<TestNodeContext>, innerWidth:Float):{root:NodeId, box:NodeId, inner:NodeId} {
+        final inner = taffy.newLeaf(sized(Dimension.length(innerWidth), Dimension.length(10.0)));
+        final box = taffy.newWithChildren(st(s -> s.display = Display.Block), [inner]);
+        final root = taffy.newWithChildren(st(s -> s.flexDirection = FlexDirection.Row), [box]);
+        taffy.computeLayoutWithMeasure(root, definite(200.0, 100.0), testMeasureFunction);
+        return {root: root, box: box, inner: inner};
+    }
+
+    /** Clears the caches of a subtree (laid out again from scratch) */
+    static function clearSubtree(taffy:TaffyTree<TestNodeContext>, id:NodeId):Void {
+        final data = @:privateAccess taffy.nodes[id];
+        data.cache.clear();
+        for (child in data.children) {
+            clearSubtree(taffy, child);
+        }
+    }
+
+    static function blockFlexItemWithOwnContextMatches() {
+        // A flex item is the root of its own block formatting context: its subtree laid out
+        // again from scratch for the inputs its parent gave it gives the same results
+        final taffy = newTestTree();
+        final tree = blockItem(taffy, 40.0);
+        final reference = @:privateAccess taffy.nodes[tree.box].cache.snapshot();
+        final replacement = taffy.newLeaf(sized(Dimension.length(40.0), Dimension.length(10.0)));
+        swap(taffy, tree.inner, replacement);
+        clearSubtree(taffy, tree.box);
+        Assert.isTrue(!taffy.matchesRelayout(tree.box, reference, new FunctionMeasurer()), 'refused without the flag');
+        Assert.isTrue(taffy.matchesRelayout(tree.box, reference, new FunctionMeasurer(), true));
+        Assert.eq(taffy.unroundedLayout(tree.box).size.width, 40.0);
+        Assert.eq(taffy.unroundedLayout(replacement).size.width, 40.0);
+    }
+
+    static function blockFlexItemWithOwnContextDetectsSizeChange() {
+        // Its content is narrower: the flex row measured its content size, which differs
+        final taffy = newTestTree();
+        final tree = blockItem(taffy, 40.0);
+        final reference = @:privateAccess taffy.nodes[tree.box].cache.snapshot();
+        final replacement = taffy.newLeaf(sized(Dimension.length(25.0), Dimension.length(10.0)));
+        swap(taffy, tree.inner, replacement);
+        clearSubtree(taffy, tree.box);
+        Assert.isTrue(!taffy.matchesRelayout(tree.box, reference, new FunctionMeasurer(), true));
     }
 
     static function clearedReferenceDoesNotMatch() {

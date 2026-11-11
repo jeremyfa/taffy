@@ -22,7 +22,7 @@ class CutoffTests {
         return [
             new TestCase("same_subtree_matches", sameSubtreeMatches),
             new TestCase("other_size_does_not_match", otherSizeDoesNotMatch),
-            new TestCase("inner_change_with_fixed_size_matches", innerChangeWithFixedSizeMatches),
+            new TestCase("inner_change_with_fixed_size_does_not_match", innerChangeWithFixedSizeDoesNotMatch),
             new TestCase("cleared_reference_does_not_match", clearedReferenceDoesNotMatch),
             new TestCase("block_container_does_not_match", blockContainerDoesNotMatch),
             new TestCase("block_flex_item_with_own_context_matches", blockFlexItemWithOwnContextMatches),
@@ -67,7 +67,9 @@ class CutoffTests {
         final reference = @:privateAccess taffy.nodes[tree.first].cache;
         swap(taffy, tree.first, replacement);
         Assert.isTrue(taffy.matchesRelayout(replacement, reference, new FunctionMeasurer()));
-        Assert.eq(taffy.unroundedLayout(replacement).size.width, 50.0);
+        // The results stay in the cache of the replacement (its parent placed the old node; the
+        // caller gives the replacement its place, see Glaze's `TaffyLayoutEngine.processChanges`)
+        Assert.isTrue(@:privateAccess taffy.nodes[replacement].cache.hasFinalLayout());
     }
 
     static function otherSizeDoesNotMatch() {
@@ -85,8 +87,11 @@ class CutoffTests {
         Assert.isTrue(!taffy.matchesRelayout(newBox, reference, new FunctionMeasurer()));
     }
 
-    static function innerChangeWithFixedSizeMatches() {
-        // A fixed size box whose child changes: the box lays out the same for its parent
+    static function innerChangeWithFixedSizeDoesNotMatch() {
+        // A fixed size box whose child changes: the box is placed the same by its parent, but a
+        // flex row also asks its items for their min-content contribution (the automatic minimum
+        // size), which depends on the content (10 then 30 here): a recorded result differs, so
+        // the box is not matched and the row is laid out again (conservative)
         final taffy = newTestTree();
         final inner = taffy.newLeaf(sized(Dimension.length(10.0), Dimension.length(10.0)));
         final box = taffy.newWithChildren(flexSized(80.0, 40.0), [inner]);
@@ -96,8 +101,7 @@ class CutoffTests {
         final newBox = taffy.newWithChildren(flexSized(80.0, 40.0), [newInner]);
         final reference = @:privateAccess taffy.nodes[box].cache;
         swap(taffy, box, newBox);
-        Assert.isTrue(taffy.matchesRelayout(newBox, reference, new FunctionMeasurer()));
-        Assert.eq(taffy.unroundedLayout(newInner).size.width, 30.0);
+        Assert.isTrue(!taffy.matchesRelayout(newBox, reference, new FunctionMeasurer()));
     }
 
     static function blockContainerDoesNotMatch() {
